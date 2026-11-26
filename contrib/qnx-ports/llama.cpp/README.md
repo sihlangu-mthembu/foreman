@@ -8,12 +8,13 @@ Use `$(nproc)` instead of `4` after `JLEVEL=` and `-j` if you want to use the ma
 
 To install the library files at a specific location (e.g. `/tmp/staging`) use options `INSTALL_ROOT_nto=<staging-install-folder>` and `USE_INSTALL_ROOT=true` with the build command.
 
-`qnx.patch` (five small changes, each guarded by `__QNX__` or `CMAKE_SYSTEM_NAME STREQUAL "QNX"`) is applied to the upstream checkout automatically:
+`qnx.patch` (six small changes, each guarded by `__QNX__` or `CMAKE_SYSTEM_NAME STREQUAL "QNX"`) is applied to the upstream checkout automatically:
 
 - `ggml-cpu.cpp`: QNX has no `_SC_PHYS_PAGES`. Device memory comes from the system page (`SYSPAGE_ENTRY(asinfo)`), and free memory from `/proc`.
 - `common/download.cpp`: `PATH_MAX` is in `<limits.h>` on QNX.
 - `vendor/sheredom/subprocess.h`: QNX has `posix_spawn` but no `posix_spawn_file_actions_addchdir_np`.
 - `vendor/cpp-httplib/CMakeLists.txt`, `common/CMakeLists.txt`: link `libsocket`.
+- `CMakeLists.txt`: define `_QNX_SOURCE`, so QNX exposes POSIX/XSI extensions such as `SA_RESTART`.
 
 # Compile the port for QNX in a Docker container
 

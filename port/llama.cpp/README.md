@@ -20,7 +20,7 @@ The binaries are written to `llama.cpp/build-qnx-<arch>/bin/`. They are statical
 
 ## What had to change
 
-The patch touches five files, with 35 added lines and no deletions. Each change is guarded by `__QNX__` or `CMAKE_SYSTEM_NAME STREQUAL "QNX"`, so other platforms are unaffected.
+The patch touches six files, with 40 added lines and no deletions. Each change is guarded by `__QNX__` or `CMAKE_SYSTEM_NAME STREQUAL "QNX"`, so other platforms are unaffected.
 
 | File | Problem on QNX | Fix |
 |---|---|---|
@@ -29,6 +29,7 @@ The patch touches five files, with 35 added lines and no deletions. Each change 
 | `vendor/sheredom/subprocess.h` | QNX has `posix_spawn` but no `posix_spawn_file_actions_addchdir_np`. | Report "no working-directory support" on QNX, so the library falls back cleanly. |
 | `vendor/cpp-httplib/CMakeLists.txt` | QNX keeps the BSD socket API (`socket`, `bind`, `inet_pton`…) in `libsocket`, not libc. | Link `socket` on QNX. |
 | `common/CMakeLists.txt` | The same, for code in `llama-common` that uses sockets directly. | Link `socket` on QNX. |
+| `CMakeLists.txt` | QNX headers hide some POSIX/XSI extensions (for example `SA_RESTART`, used by `llama-quantize`) unless `_QNX_SOURCE` is defined. | Define `_QNX_SOURCE` for QNX builds. |
 
 The configuration choices in `build.sh` are deliberate:
 - **OpenMP is off.** ggml then uses its own pthread pool, which works well on QNX.
