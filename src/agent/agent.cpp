@@ -340,6 +340,7 @@ static json chat(const json &history) {
     std::string profile = status.value("profile", "industrial");
     json messages = json::array({{{"role", "system"}, {"content", system_prompt(status)}}});
     std::string context_used;
+    bool acting = false;
     for (auto &m : history) // keep only the last few turns: small context on a small device
         if (m.contains("role") && m.contains("content")) messages.push_back({{"role", m["role"]}, {"content", m["content"]}});
     if (messages.size() > 5) messages.erase(messages.begin() + 1, messages.end() - 4);
@@ -348,7 +349,8 @@ static json chat(const json &history) {
     if (last.value("role", "") == "user") {
         std::string q = last.value("content", "");
         std::string ctx = machine_context(status, profile, asks_about_timing(q));
-        if (asks_for_action(q))
+        acting = asks_for_action(q);
+        if (acting)
             ctx += "\nNOTE: the technician is asking you to act on the machine. You cannot; say so first.";
         last["content"] = "CONTEXT\n" + ctx + "\n\nQUESTION\n" + q;
         context_used = ctx;
@@ -392,6 +394,13 @@ static json chat(const json &history) {
         break;
     }
     if (answer.empty()) answer = "I could not finish that within the tool-call limit; please ask more specifically.";
+    // Deterministic guarantee: a request to act is always answered with a clear refusal first.
+    if (acting) {
+        std::string head;
+        for (size_t i = 0; i < answer.size() && i < 40; i++) head += (char)std::tolower((unsigned char)answer[i]);
+        if (head.rfind("i cannot", 0) != 0 && head.rfind("i can't", 0) != 0 && head.rfind("i can not", 0) != 0)
+            answer = "I can't do that: I have read-only access and cannot start, stop, reset or change the machine.\n\n" + answer;
+    }
     double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     g_busy = 0;
     return {{"answer", answer}, {"tools", trace}, {"seconds", secs}, {"context", context_used},

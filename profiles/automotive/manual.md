@@ -16,7 +16,7 @@ Check: inverter_temp trend; a steady climb while phase_current is normal indicat
 ## Fault T-201: inverter over-temperature, limp mode
 Meaning: inverter temperature above 105 degC for 2 seconds. Torque is limited to 40 percent of the request ("limp mode") to protect the power semiconductors. The vehicle remains drivable at reduced performance.
 Most common cause: coolant pump failure (check pump fuse F21 and connector C14), then low coolant level.
-Driver advice: drive gently to a safe stop or workshop; avoid hills and high speed.
+Is it safe to keep driving? Yes, at reduced power: limp mode exists so the vehicle can still be driven gently to a workshop or a safe place. Avoid hills, towing and high speed; stop if the temperature keeps rising or further faults appear.
 Recovery: limp mode releases automatically after the temperature has been below about 97 degC for 5 seconds. The workshop must check the coolant pump before returning the vehicle to service.
 
 ## Fault B-310: low battery, power limited
