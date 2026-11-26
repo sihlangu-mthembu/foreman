@@ -46,6 +46,10 @@ Each phase runs about 61,000–65,000 cycles.
 - **CPU pinning wasn't needed.** Partitioning the cores (B2) didn't improve on priority-only scheduling (B) in this environment. Pinning is still available (`fm-plant -c <cpu>`, `on -C <cpu>`) for systems that want a dedicated core.
 - **On a 2-vCPU host the picture is different, and the control phase explains why.** On GitHub's 2-vCPU private runners, the guest's vCPUs compete with the host for both cores. There, phase B showed about 1–2% misses and phase D (host stress alone) showed 34%. That run is why the experiment includes phase D.
 
+## A note on the demo recording
+
+The demo video is recorded on the CI host with Chromium and Playwright, which encode video in real time. That puts heavy, bursty load on the host, the same effect as phase D. For recordings, the workflow therefore pins QEMU to host CPUs 2–3 and the browser to CPUs 0–1, and resets the loop statistics when the recording starts. A real controller has no screen recorder running on it. The timing experiment above runs without any pinning.
+
 ## Reproduce
 
 ```sh

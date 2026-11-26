@@ -290,7 +290,9 @@ static std::string system_prompt(const json &status) {
            "context, get_control_timing for questions about the control loop.\n"
            "- You are READ-ONLY: you cannot start, stop, reset, restart or change anything. If asked to, say plainly "
            "that you cannot, then give the manual's procedure for the technician to follow at the operator panel.\n"
-           "- Timing units: us = microseconds, ms = milliseconds (1 ms = 1000 us). The control loop period is 1 ms.\n"
+           "- Timing units: us = microseconds, ms = milliseconds (1 ms = 1000 us). The control loop period is 1 ms. "
+           "Every deadline miss is a real event: if the count is above zero, say how many and that some deadlines were "
+           "missed; only say all deadlines were met when the count is 0.\n"
            "- Be concise: at most 5 short sentences or bullets.";
 }
 

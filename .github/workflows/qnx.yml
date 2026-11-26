@@ -77,7 +77,8 @@ jobs:
           source /home/runner/qnx/800/qnxsdp-env.sh
           mkdir -p img && (cd img && mkqnximage --type=qemu --arch=x86_64 --clean --force --noprompt \
             --data-size=3000 --data-inodes=20000 2>&1 | grep -v "Broken pipe" | tail -2)
-          QRAM=3G QCPU=2 ci/qemu-up.sh img
+          # When recording, keep the VM on host CPUs 2-3 and the browser/video encoder on 0-1 (see docs/RESULTS.md)
+          QPIN="${{ inputs.record && '2,3' || '' }}" QRAM=3G QCPU=2 ci/qemu-up.sh img
           ci/deploy.sh
       - name: Technician session
         run: ci/session.sh $PROFILE 2>&1 | tee session.log
@@ -89,7 +90,8 @@ jobs:
           ssh_root "cd /data/home/qnxuser/foreman && ./start.sh $PROFILE 10"   # fresh machine state for the recording
           for i in $(seq 1 60); do curl -sf localhost:8080/api/live >/dev/null && break; sleep 2; done
           for i in $(seq 1 60); do ssh_root "curl -sf http://127.0.0.1:8081/health" >/dev/null 2>&1 && break; sleep 2; done
-          python3 ci/record-demo.py $PROFILE demo
+          ssh_root "cd /data/home/qnxuser/foreman && ./fmctl reset-stats"
+          taskset -c 0,1 python3 ci/record-demo.py $PROFILE demo
           ls -la demo
       - uses: actions/upload-artifact@v4
         if: inputs.record

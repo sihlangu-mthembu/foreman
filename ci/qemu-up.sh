@@ -13,7 +13,8 @@ CPUS=("host,-la57,-amx-tile,-amx-int8,-amx-bf16,-avx512f,-avx512vl,-avx512bw,-av
 for attempt in 1 2 3; do
   [ -w /dev/kvm ] && KVM="--enable-kvm --cpu ${CPUS[$((attempt - 1))]}"
   rm -f console.log qemu.pid
-  qemu-system-x86_64 -smp ${QCPU:-2} $KVM -m ${QRAM:-3G} \
+  PIN=""; [ -n "${QPIN:-}" ] && PIN="taskset -c $QPIN"   # optional: keep the VM on dedicated host CPUs
+  $PIN qemu-system-x86_64 -smp ${QCPU:-2} $KVM -m ${QRAM:-3G} \
     -kernel output/ifs.bin -drive file=output/disk-qemu.vmdk,if=ide,id=drv0 \
     -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8080-:8080 -device virtio-net-pci,netdev=net0 \
     -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-pci,rng=rng0 \
