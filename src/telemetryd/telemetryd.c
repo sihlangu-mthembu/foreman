@@ -62,7 +62,7 @@ static int render(const char *path, char **out, size_t *len) {
     return EOK;
 }
 
-static int fm_open(resmgr_context_t *ctp, io_open_t *msg, RESMGR_HANDLE_T *handle, void *extra) {
+static int tl_open(resmgr_context_t *ctp, io_open_t *msg, RESMGR_HANDLE_T *handle, void *extra) {
     (void)handle;
     if (msg->connect.ioflag & _IO_FLAG_WR) return EROFS;          /* read-only by design */
     if (msg->connect.ioflag & (O_CREAT | O_TRUNC)) return EROFS;
@@ -79,7 +79,7 @@ static int fm_open(resmgr_context_t *ctp, io_open_t *msg, RESMGR_HANDLE_T *handl
     return EOK;
 }
 
-static int fm_read(resmgr_context_t *ctp, io_read_t *msg, struct fm_ocb *ocb) {
+static int tl_read(resmgr_context_t *ctp, io_read_t *msg, struct fm_ocb *ocb) {
     int status = iofunc_read_verify(ctp, msg, &ocb->hdr, NULL);
     if (status != EOK) return status;
     if ((msg->i.xtype & _IO_XTYPE_MASK) != _IO_XTYPE_NONE) return ENOSYS;
@@ -93,12 +93,12 @@ static int fm_read(resmgr_context_t *ctp, io_read_t *msg, struct fm_ocb *ocb) {
     return _RESMGR_NPARTS(1);
 }
 
-static int fm_write(resmgr_context_t *ctp, io_write_t *msg, struct fm_ocb *ocb) {
+static int tl_write(resmgr_context_t *ctp, io_write_t *msg, struct fm_ocb *ocb) {
     (void)ctp; (void)msg; (void)ocb;
     return EROFS;
 }
 
-static int fm_close(resmgr_context_t *ctp, void *reserved, struct fm_ocb *ocb) {
+static int tl_close(resmgr_context_t *ctp, void *reserved, struct fm_ocb *ocb) {
     free(ocb->data);
     ocb->data = NULL;
     return iofunc_close_ocb_default(ctp, reserved, &ocb->hdr);
@@ -110,10 +110,10 @@ int main(int argc, char **argv) {
     if (!dpp) { perror("dispatch_create"); return 1; }
 
     iofunc_func_init(_RESMGR_CONNECT_NFUNCS, &g_connect, _RESMGR_IO_NFUNCS, &g_io);
-    g_connect.open = fm_open;
-    g_io.read = fm_read;
-    g_io.write = fm_write;
-    g_io.close_ocb = fm_close;
+    g_connect.open = tl_open;
+    g_io.read = tl_read;
+    g_io.write = tl_write;
+    g_io.close_ocb = tl_close;
     iofunc_attr_init(&g_attr, S_IFDIR | 0555, NULL, NULL);
 
     resmgr_attr_t rattr = {.nparts_max = 1, .msg_max_size = 2048};
