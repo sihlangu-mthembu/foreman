@@ -48,5 +48,5 @@ Generation speed varies with the cloud host's CPU. Qwen3-1.7B Q4_K_M runs at a s
 ## Status and next steps
 
 - Tested: x86_64 under QEMU/KVM, CPU backend, chat completions, tool calling, `llama-bench`.
-- aarch64le (Raspberry Pi 4/5): toolchain file provided; build verification in CI is pending, and hardware reports are welcome.
+- aarch64le (Raspberry Pi 4/5): builds in CI (llama-server, llama-cli, llama-completion, llama-bench and all Foreman programs); not yet run on hardware, so reports are welcome.
 - Planned: offer the patch upstream to llama.cpp, and the build recipe to [qnx-ports/build-files](https://github.com/qnx-ports/build-files).
