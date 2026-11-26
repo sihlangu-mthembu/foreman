@@ -320,6 +320,12 @@ int main(int argc, char **argv) {
         while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR && !g_stop) {}
 #endif
         uint64_t woke = now_ns();
+        static int anchored = 0;
+        if (!anchored) {
+            /* The periodic timer expires on the system clock tick, so its phase relative to our start time is
+               arbitrary. Anchor the schedule to the first expiry: latency then measures true jitter. */
+            next = woke; anchored = 1;
+        }
         float lat_us = woke > next ? (float)(woke - next) / 1000.0f : 0.0f;
 
         step(&s, period_us / 1e6f, v);

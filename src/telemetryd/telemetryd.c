@@ -36,7 +36,8 @@ struct fm_ocb {
 };
 
 static const struct fm_state *g_st;
-static iofunc_attr_t g_attr;
+static iofunc_attr_t g_attr;      /* the /dev/foreman directory */
+static iofunc_attr_t g_file;      /* every published file: regular, read-only */
 static resmgr_connect_funcs_t g_connect;
 static resmgr_io_funcs_t g_io;
 static char g_buf[1 << 18];
@@ -44,6 +45,11 @@ static char g_buf[1 << 18];
 /* Render the file named by `path` (relative to /dev/foreman) into a fresh heap buffer. */
 static int render(const char *path, char **out, size_t *len) {
     int n = -1, sig, minutes = 10;
+    if (path[0] == 0) { /* the directory itself: a plain listing */
+        static const char idx[] = "status\nevents\ntiming\nsignals\ntrend/<0-5>[/<minutes>]\n";
+        *out = strdup(idx); *len = sizeof idx - 1;
+        return *out ? EOK : ENOMEM;
+    }
     if (!g_st && !(g_st = fm_attach())) return ENODEV; /* plant not running yet */
     if (strcmp(path, "status") == 0) n = fm_json_status(g_st, g_buf, sizeof g_buf);
     else if (strcmp(path, "events") == 0) n = fm_json_events(g_st, g_buf, sizeof g_buf);
@@ -70,8 +76,10 @@ static int tl_open(resmgr_context_t *ctp, io_open_t *msg, RESMGR_HANDLE_T *handl
     if (!ocb) return ENOMEM;
     int status = render(msg->connect.path, &ocb->data, &ocb->len);
     if (status != EOK) { free(ocb); return status; }
-    if ((status = iofunc_open(ctp, msg, &g_attr, NULL, NULL)) != EOK ||
-        (status = iofunc_ocb_attach(ctp, msg, &ocb->hdr, &g_attr, NULL)) != EOK) {
+    iofunc_attr_t *attr = msg->connect.path[0] ? &g_file : &g_attr;
+    if (attr == &g_file) g_file.nbytes = ocb->len;
+    if ((status = iofunc_open(ctp, msg, attr, NULL, NULL)) != EOK ||
+        (status = iofunc_ocb_attach(ctp, msg, &ocb->hdr, attr, NULL)) != EOK) {
         free(ocb->data); free(ocb);
         return status;
     }
@@ -81,7 +89,7 @@ static int tl_open(resmgr_context_t *ctp, io_open_t *msg, RESMGR_HANDLE_T *handl
 
 static int tl_read(resmgr_context_t *ctp, io_read_t *msg, struct fm_ocb *ocb) {
     int status = iofunc_read_verify(ctp, msg, &ocb->hdr, NULL);
-    if (status != EOK) return status;
+    if (status != EOK && !(status == EISDIR && ocb->data)) return status; /* the directory reads as its listing */
     if ((msg->i.xtype & _IO_XTYPE_MASK) != _IO_XTYPE_NONE) return ENOSYS;
     size_t off = (size_t)ocb->hdr.offset;
     size_t n = off < ocb->len ? ocb->len - off : 0;
@@ -115,6 +123,7 @@ int main(int argc, char **argv) {
     g_io.write = tl_write;
     g_io.close_ocb = tl_close;
     iofunc_attr_init(&g_attr, S_IFDIR | 0555, NULL, NULL);
+    iofunc_attr_init(&g_file, S_IFREG | 0444, NULL, NULL);
 
     resmgr_attr_t rattr = {.nparts_max = 1, .msg_max_size = 2048};
     if (resmgr_attach(dpp, &rattr, mount, _FTYPE_ANY, _RESMGR_FLAG_DIR, &g_connect, &g_io, &g_attr) == -1) {

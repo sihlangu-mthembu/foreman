@@ -215,14 +215,57 @@ static json run_tool(const std::string &name, const json &args, const std::strin
 
 // ---------------------------------------------------------------- chat loop
 
-static std::string system_prompt(const json &status) {
+// Compact, factual snapshot of the machine for the prompt. A small on-device model answers far more
+// reliably when the facts are in front of it than when it must decide to fetch them.
+static std::string fmt_num(double v) {
+    char b[32];
+    snprintf(b, sizeof b, std::fabs(v) >= 100 ? "%.0f" : "%.1f", v);
+    return b;
+}
+
+static std::string machine_context(const json &status, const std::string &profile) {
+    std::string out = "LIVE MACHINE STATE (read from the controller just now)\n";
+    out += "mode: " + status.value("mode", "?") + "\n";
+    if (status.contains("values"))
+        for (auto &kv : status["values"].items())
+            out += kv.key() + " = " + fmt_num(kv.value().value("value", 0.0)) + " " + kv.value().value("unit", "") + "\n";
+    json alarms = status.value("active_alarms", json::array());
+    out += "active alarms: ";
+    if (alarms.empty()) out += "none";
+    for (auto &a : alarms) out += a.get<std::string>() + " ";
+    out += "\n\nRECENT EVENTS (seconds since controller start; now = " + fmt_num(status.value("uptime_s", 0.0)) + " s)\n";
+    json ev = telemetry_json("events");
+    if (ev.contains("events")) {
+        auto &e = ev["events"];
+        size_t start = e.size() > 6 ? e.size() - 6 : 0;
+        for (size_t i = start; i < e.size(); i++)
+            out += "t=" + fmt_num(e[i].value("t_s", 0.0)) + " s  " + e[i].value("kind", "") + "  " + e[i].value("code", "") +
+                   "  " + e[i].value("text", "") + "\n";
+        if (e.empty()) out += "none\n";
+    }
+    for (auto &a : alarms) { // the manual entry for each active alarm
+        json m = search_manual(profile, "Alarm " + a.get<std::string>());
+        if (m.contains("sections") && !m["sections"].empty()) {
+            std::string t = m["sections"][0].value("text", "");
+            if (t.size() > 900) t = t.substr(0, 900) + "...";
+            out += "\nMANUAL: " + m["sections"][0].value("section", "") + "\n" + t;
+        }
+    }
+    return out;
+}
+
+static std::string system_prompt(const json &status, const std::string &profile) {
     std::string machine = status.value("machine", "the machine");
-    return "You are Foreman, an offline maintenance assistant running on the controller of " + machine +
-           ". Answer technicians' questions using your tools: check live data before answering questions about the "
-           "machine's state, and search the manual for alarm codes and procedures. Quote actual values with units. "
-           "Be concise: at most 5 short sentences or bullet points. You have READ-ONLY access: you cannot start, "
-           "stop, reset or change anything. If asked to, say the technician must do it at the operator panel, and "
-           "tell them the manual's safe procedure.";
+    return "You are Foreman, an offline maintenance assistant running on the controller of " + machine + ".\n"
+           "Rules:\n"
+           "- Base every statement about the machine on the LIVE MACHINE STATE, RECENT EVENTS and MANUAL below, or on "
+           "tool results. Quote real values with units. Never invent values or events.\n"
+           "- Use get_trend for questions about change over time, search_manual for procedures or codes not shown "
+           "below, get_control_timing for questions about the control loop.\n"
+           "- You are READ-ONLY: you cannot start, stop, reset, restart or change anything. If asked to, say so and "
+           "give the manual's procedure for the technician to follow at the operator panel.\n"
+           "- Be concise: at most 5 short sentences or bullets.\n\n" +
+           machine_context(status, profile);
 }
 
 static std::mutex g_llm_mutex;
@@ -233,8 +276,14 @@ static json chat(const json &history) {
     g_busy = 1;
     auto t0 = std::chrono::steady_clock::now();
     json status = telemetry_json("status");
+    if (status.contains("error")) {
+        g_busy = 0;
+        return {{"answer", "I can't read the machine's telemetry right now (" + status["error"].get<std::string>() +
+                            "), so I won't guess. Check that the controller services are running."},
+                {"tools", json::array()}, {"seconds", 0.0}, {"prompt_tokens", 0}, {"completion_tokens", 0}};
+    }
     std::string profile = status.value("profile", "industrial");
-    json messages = json::array({{{"role", "system"}, {"content", system_prompt(status)}}});
+    json messages = json::array({{{"role", "system"}, {"content", system_prompt(status, profile)}}});
     for (auto &m : history) // keep only the last few turns: small context on a small device
         if (m.contains("role") && m.contains("content")) messages.push_back({{"role", m["role"]}, {"content", m["content"]}});
     if (messages.size() > 7) messages.erase(messages.begin() + 1, messages.end() - 6);
