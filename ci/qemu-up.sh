@@ -25,10 +25,15 @@ for attempt in 1 2 3; do
     if timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/2222 && head -c 4 <&3' 2>/dev/null | grep -q SSH; then
       echo "ssh up after ~$((i * 3)) s"
       if [ -n "${QRT:-}" ]; then
-        # Real-time host scheduling for the VM's threads (used with QPIN, so other host work has its own CPUs).
+        # Real-time host scheduling for the two vCPU threads only, on the dedicated host CPUs (QPIN). QEMU's
+        # main and I/O threads move to the other CPUs so networking and disk never wait behind a busy vCPU.
         sudo sysctl -q -w kernel.sched_rt_runtime_us=-1
-        for t in /proc/$(cat qemu.pid)/task/*; do sudo chrt -f -p "$QRT" "${t##*/}"; done
-        echo "qemu threads now SCHED_FIFO $QRT on host CPUs ${QPIN:-all}"
+        for t in /proc/$(cat qemu.pid)/task/*; do
+          tid=${t##*/}
+          if grep -q "^CPU [0-9]*/KVM" "$t/comm"; then sudo chrt -f -p "$QRT" "$tid"
+          else sudo taskset -p -c "${QHOUSE:-0,1}" "$tid" >/dev/null; fi
+        done
+        echo "vCPU threads SCHED_FIFO $QRT on host CPUs $QPIN; other QEMU threads on ${QHOUSE:-0,1}"
       fi
       exit 0
     fi
