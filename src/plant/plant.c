@@ -11,6 +11,9 @@
  * it falls back to clock_nanosleep with an absolute deadline.
  */
 #define _POSIX_C_SOURCE 200809L
+#ifdef __QNX__
+#define _QNX_SOURCE /* QNX extensions: pulses, timers, ThreadCtl */
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>

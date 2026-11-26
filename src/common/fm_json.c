@@ -1,4 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
+#ifdef __QNX__
+#define _QNX_SOURCE /* QNX extensions: pulses, timers, ThreadCtl */
+#endif
 #include "fm_json.h"
 #include <fcntl.h>
 #include <stdarg.h>

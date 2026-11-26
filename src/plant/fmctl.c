@@ -5,6 +5,9 @@
  * The read commands need no privilege; they use the same read-only view the AI agent gets.
  */
 #define _POSIX_C_SOURCE 200809L
+#ifdef __QNX__
+#define _QNX_SOURCE /* QNX extensions: pulses, timers, ThreadCtl */
+#endif
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
