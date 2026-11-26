@@ -33,6 +33,7 @@ extern "C" {
 #endif
 
 using json = nlohmann::ordered_json; // keep the machine's signal order
+static std::string fmt_num(double v);
 
 struct config {
     std::string host = "0.0.0.0";
@@ -212,6 +213,9 @@ static json run_tool(const std::string &name, const json &args, const std::strin
     if (name == "get_control_timing") {
         json t = telemetry_json("timing");
         t.erase("hist");
+        double miss = t.value("deadline_misses", 0.0);
+        t["all_deadlines_met"] = miss == 0;
+        t["verdict"] = miss == 0 ? "all deadlines met" : "some deadlines missed: " + fmt_num(miss) + " in this window";
         return t;
     }
     return json{{"error", "no such tool: " + name + ". Foreman has read-only tools and cannot change the machine."}};
@@ -250,7 +254,9 @@ static std::string machine_context(const json &status, const std::string &profil
     json tm = with_timing ? telemetry_json("timing") : json{{"error", "not requested"}};
     if (!tm.contains("error")) {
         double cyc = tm.value("cycles", 0.0), miss = tm.value("deadline_misses", 0.0);
-        out += "\ncontrol loop: " + fmt_num(1e6 / std::max(1.0, tm.value("period_us", 1000.0))) + " Hz, " +
+        out += std::string("\ncontrol loop verdict: ") + (miss == 0 ? "ALL deadlines met (0 missed)" :
+               "NOT all deadlines met: " + fmt_num(miss) + " missed") +
+               "\ncontrol loop: " + fmt_num(1e6 / std::max(1.0, tm.value("period_us", 1000.0))) + " Hz, " +
                fmt_num(miss) + " missed deadlines in " + fmt_num(cyc) + " cycles (" +
                fmt_num(cyc > 0 ? 100.0 * miss / cyc : 0.0) + "%), worst wake-up latency " +
                fmt_num(tm.value("max_wake_latency_us", 0.0) / 1000.0) + " ms, p99 " +

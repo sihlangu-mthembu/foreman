@@ -23,7 +23,14 @@ for attempt in 1 2 3; do
   for i in $(seq 1 40); do
     if grep -q "Shutdown\[" console.log 2>/dev/null; then echo "guest stopped during boot:"; grep -m3 -E "Shutdown|WARNING" console.log; break; fi
     if timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/2222 && head -c 4 <&3' 2>/dev/null | grep -q SSH; then
-      echo "ssh up after ~$((i * 3)) s"; exit 0
+      echo "ssh up after ~$((i * 3)) s"
+      if [ -n "${QRT:-}" ]; then
+        # Real-time host scheduling for the VM's threads (used with QPIN, so other host work has its own CPUs).
+        sudo sysctl -q -w kernel.sched_rt_runtime_us=-1
+        for t in /proc/$(cat qemu.pid)/task/*; do sudo chrt -f -p "$QRT" "${t##*/}"; done
+        echo "qemu threads now SCHED_FIFO $QRT on host CPUs ${QPIN:-all}"
+      fi
+      exit 0
     fi
     sleep 3
   done

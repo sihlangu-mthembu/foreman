@@ -78,7 +78,7 @@ jobs:
           mkdir -p img && (cd img && mkqnximage --type=qemu --arch=x86_64 --clean --force --noprompt \
             --data-size=3000 --data-inodes=20000 2>&1 | grep -v "Broken pipe" | tail -2)
           # When recording, keep the VM on host CPUs 2-3 and the browser/video encoder on 0-1 (see docs/RESULTS.md)
-          QPIN="${{ inputs.record && '2,3' || '' }}" QRAM=3G QCPU=2 ci/qemu-up.sh img
+          QPIN="${{ inputs.record && '2,3' || '' }}" QRT="${{ inputs.record && '50' || '' }}" QRAM=3G QCPU=2 ci/qemu-up.sh img
           ci/deploy.sh
       - name: Technician session
         run: ci/session.sh $PROFILE 2>&1 | tee session.log
