@@ -1,0 +1,30 @@
+name: qnx-ports-recipe
+# Validates contrib/qnx-ports/llama.cpp inside a checkout of qnx-ports/build-files, exactly as it would be
+# contributed upstream, for x86_64 and aarch64le.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['contrib/qnx-ports/**', '.github/workflows/qnx-ports-recipe.yml']
+jobs:
+  build:
+    if: github.repository_owner == 'sihlangu-mthembu'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: foreman }
+      - uses: actions/checkout@v4
+        with: { repository: qnx-ports/build-files, path: build-files }
+      - uses: actions/checkout@v4
+        with: { repository: ggml-org/llama.cpp, ref: b12778, path: llama.cpp }
+      - uses: ./foreman/.github/actions/qnx-sdp
+        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}", key: "${{ secrets.MYQNX_LICENSE_KEY }}" }
+      - name: Build with the qnx-ports recipe (both architectures)
+        run: |
+          cp -r foreman/contrib/qnx-ports/llama.cpp build-files/ports/llama.cpp
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          QNX_PROJECT_ROOT="$(pwd)/llama.cpp" make -C build-files/ports/llama.cpp install JLEVEL=$(nproc) \
+            INSTALL_ROOT_nto=/tmp/staging USE_INSTALL_ROOT=true > recipe.log 2>&1 || { grep -E -B2 -A8 "error|Error" recipe.log | tail -80; exit 1; }
+          grep -E "GGML_SYSTEM_ARCH|qnx.patch" recipe.log | sort | uniq
+          for a in x86_64 aarch64le; do echo "== $a"; ls /tmp/staging/$a/usr/local/bin | head -40 | tr '\n' ' '; echo; file /tmp/staging/$a/usr/local/bin/llama-server /tmp/staging/$a/usr/local/lib/libllama.so* | cut -c1-140; done
