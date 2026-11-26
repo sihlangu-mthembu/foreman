@@ -6,11 +6,11 @@ set -u
 D=${1:-img}; cd "$D"
 echo "host CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
 KVM="--cpu max"; [ -w /dev/kvm ] && KVM="--enable-kvm --cpu host"
-# Host passthrough first; on newer server CPUs QNX 8.0 can stop in early boot ("Too early for per-cpu data"),
-# so later attempts hide the newest CPU features from the guest.
-CPUS=("host" "host,-la57" "host,-la57,-amx-tile,-amx-int8,-amx-bf16,-avx512f,-avx512vl,-avx512bw,-avx512dq,-avx512cd"
-      "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+avx,+avx2,+fma,+f16c,+bmi1,+bmi2,+movbe,+xsave")
-for attempt in 1 2 3 4; do
+# QNX 8.0 stops in early boot ("Too early for per-cpu data") when AMX/AVX-512 features of recent Intel server
+# CPUs (seen on Xeon 6975P-C) are passed through; hiding them boots on every runner CPU we have seen (Intel and
+# AMD EPYC). Foreman's llama.cpp build uses AVX2, so nothing is lost. Plain passthrough is the fallback.
+CPUS=("host,-la57,-amx-tile,-amx-int8,-amx-bf16,-avx512f,-avx512vl,-avx512bw,-avx512dq,-avx512cd" "host" "host,-la57")
+for attempt in 1 2 3; do
   [ -w /dev/kvm ] && KVM="--enable-kvm --cpu ${CPUS[$((attempt - 1))]}"
   rm -f console.log qemu.pid
   qemu-system-x86_64 -smp ${QCPU:-2} $KVM -m ${QRAM:-3G} \
