@@ -234,9 +234,24 @@ static std::string machine_context(const json &status, const std::string &profil
     std::map<std::string, std::string> titles;
     if (ev.contains("events"))
         for (auto &e : ev["events"]) if (e.value("kind", "") == "alarm") titles[e.value("code", "")] = e.value("text", "");
-    out += "active alarms: ";
-    if (alarms.empty()) out += "none";
-    for (auto &a : alarms) out += "\n  " + a.get<std::string>() + ": " + titles[a.get<std::string>()];
+    // Faults that stop or derate the machine first, warnings (codes starting with W) after.
+    std::vector<std::string> codes;
+    for (auto &a : alarms) codes.push_back(a.get<std::string>());
+    std::stable_sort(codes.begin(), codes.end(), [](const std::string &x, const std::string &y) {
+        return (x[0] != 'W') && (y[0] == 'W');
+    });
+    out += "active alarms (most severe first): ";
+    if (codes.empty()) out += "none";
+    for (auto &c : codes) out += "\n  " + c + (c[0] == 'W' ? " (warning): " : ": ") + titles[c];
+    json tm = telemetry_json("timing");
+    if (!tm.contains("error")) {
+        double cyc = tm.value("cycles", 0.0), miss = tm.value("deadline_misses", 0.0);
+        out += "\ncontrol loop: " + fmt_num(1e6 / std::max(1.0, tm.value("period_us", 1000.0))) + " Hz, " +
+               fmt_num(miss) + " missed deadlines in " + fmt_num(cyc) + " cycles (" +
+               fmt_num(cyc > 0 ? 100.0 * miss / cyc : 0.0) + "%), worst wake-up latency " +
+               fmt_num(tm.value("max_wake_latency_us", 0.0) / 1000.0) + " ms, p99 " +
+               fmt_num(tm.value("p99_wake_latency_us", 0.0)) + " us";
+    }
     out += "\n\nRECENT EVENTS (seconds since controller start; now = " + fmt_num(status.value("uptime_s", 0.0)) + " s)\n";
     if (ev.contains("events")) {
         auto &e = ev["events"];
@@ -271,6 +286,7 @@ static std::string system_prompt(const json &status) {
            "context, get_control_timing for questions about the control loop.\n"
            "- You are READ-ONLY: you cannot start, stop, reset, restart or change anything. If asked to, say plainly "
            "that you cannot, then give the manual's procedure for the technician to follow at the operator panel.\n"
+           "- Timing units: us = microseconds, ms = milliseconds (1 ms = 1000 us). The control loop period is 1 ms.\n"
            "- Be concise: at most 5 short sentences or bullets.";
 }
 
