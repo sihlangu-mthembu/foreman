@@ -71,7 +71,7 @@ static int tl_open(resmgr_context_t *ctp, io_open_t *msg, RESMGR_HANDLE_T *handl
     int status = render(msg->connect.path, &ocb->data, &ocb->len);
     if (status != EOK) { free(ocb); return status; }
     if ((status = iofunc_open(ctp, msg, &g_attr, NULL, NULL)) != EOK ||
-        (status = iofunc_ocb_attach(ctp, msg, ocb, &g_attr, NULL)) != EOK) {
+        (status = iofunc_ocb_attach(ctp, msg, &ocb->hdr, &g_attr, NULL)) != EOK) {
         free(ocb->data); free(ocb);
         return status;
     }

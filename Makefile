@@ -4,11 +4,13 @@ ifeq ($(QNX),1)
   CC     = qcc -Vgcc_ntox86_64
   CXX    = q++ -Vgcc_ntox86_64_cxx
   LDLIBS_NET = -lsocket
+  LDLIBS_THR =
   OUT   ?= build-qnx
 else
   CC    ?= cc
   CXX   ?= c++
   LDLIBS_NET =
+  LDLIBS_THR = -lpthread
   OUT   ?= build
 endif
 CFLAGS  += -O2 -Wall -Wextra -std=gnu11
@@ -32,7 +34,7 @@ $(OUT):
 	mkdir -p $(OUT)
 
 $(OUT)/fm-plant: src/plant/plant.c src/plant/profiles.c src/common/fm_shm.h src/plant/profiles.h | $(OUT)
-	$(CC) $(CFLAGS) -o $@ src/plant/plant.c src/plant/profiles.c $(LDLIBS) -lpthread
+	$(CC) $(CFLAGS) -o $@ src/plant/plant.c src/plant/profiles.c $(LDLIBS) $(LDLIBS_THR)
 
 $(OUT)/fmctl: src/plant/fmctl.c $(COMMON) src/common/fm_json.h | $(OUT)
 	$(CC) $(CFLAGS) -o $@ src/plant/fmctl.c $(COMMON) $(LDLIBS)
@@ -47,7 +49,7 @@ $(OUT)/httplib.o: third_party/cpp-httplib/httplib.cpp third_party/cpp-httplib/ht
 	$(CXX) $(CXXFLAGS) -w -c -o $@ third_party/cpp-httplib/httplib.cpp
 
 $(OUT)/fm-agent: src/agent/agent.cpp $(OUT)/httplib.o $(AGENT_SRC) | $(OUT)
-	$(CXX) $(CXXFLAGS) $(AGENT_DEFS) -o $@ src/agent/agent.cpp $(OUT)/httplib.o $(AGENT_SRC) $(LDLIBS_NET) -lpthread
+	$(CXX) $(CXXFLAGS) $(AGENT_DEFS) -o $@ src/agent/agent.cpp $(OUT)/httplib.o $(AGENT_SRC) $(LDLIBS_NET) $(LDLIBS_THR)
 
 clean:
 	rm -rf build build-qnx
