@@ -85,9 +85,10 @@ struct fm_state {
     struct fm_event ev[FM_FAULT_N];
 };
 
-struct fm_ctl {
-    volatile uint32_t seq;    /* bump after writing cmd */
-    char cmd[120];            /* "inject <scenario>", "clear", "reset-stats", "setpoint <value>" */
+#define FM_CTL_Q 16
+struct fm_ctl {               /* single-producer command queue: fmctl writes slot head%Q, then bumps head */
+    volatile uint32_t head;
+    char cmd[FM_CTL_Q][120];  /* "inject <scenario>", "clear", "reset-stats", "setpoint <value>" */
 };
 
 /* --- seqlock helpers --- */

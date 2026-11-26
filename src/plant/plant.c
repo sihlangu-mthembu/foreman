@@ -69,7 +69,7 @@ struct sim {
 
 static struct fm_state *g_st;
 static struct fm_ctl *g_ctl;
-static uint32_t g_ctl_seq;
+static uint32_t g_ctl_tail;
 static uint64_t g_t0_ns;
 
 static uint64_t t_ms(void) { return (now_ns() - g_t0_ns) / 1000000ull; }
@@ -358,16 +358,19 @@ int main(int argc, char **argv) {
         first = 0;
         fm_write_end(g_st);
 
-        /* Operator commands, polled every 10 ms. */
-        if (tm->cycles % 10 == 0 && g_ctl->seq != g_ctl_seq) {
-            g_ctl_seq = g_ctl->seq;
-            char cmd[sizeof g_ctl->cmd];
-            memcpy(cmd, g_ctl->cmd, sizeof cmd);
-            cmd[sizeof cmd - 1] = 0;
-            fm_write_begin(g_st);
-            handle_command(&s, cmd);
-            fm_write_end(g_st);
-            if (strcmp(cmd, "reset-stats") == 0) lat_sum = 0;
+        /* Operator commands, polled every 10 ms; every queued command is applied in order. */
+        if (tm->cycles % 10 == 0 && g_ctl->head != g_ctl_tail) {
+            while (g_ctl->head != g_ctl_tail) {
+                __atomic_thread_fence(__ATOMIC_ACQUIRE);
+                char cmd[sizeof g_ctl->cmd[0]];
+                memcpy(cmd, g_ctl->cmd[g_ctl_tail % FM_CTL_Q], sizeof cmd);
+                cmd[sizeof cmd - 1] = 0;
+                g_ctl_tail++;
+                fm_write_begin(g_st);
+                handle_command(&s, cmd);
+                fm_write_end(g_st);
+                if (strcmp(cmd, "reset-stats") == 0) lat_sum = 0;
+            }
         }
 
         next += period_ns;

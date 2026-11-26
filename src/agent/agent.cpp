@@ -301,6 +301,7 @@ static json chat(const json &history) {
     }
     std::string profile = status.value("profile", "industrial");
     json messages = json::array({{{"role", "system"}, {"content", system_prompt(status)}}});
+    std::string context_used;
     for (auto &m : history) // keep only the last few turns: small context on a small device
         if (m.contains("role") && m.contains("content")) messages.push_back({{"role", m["role"]}, {"content", m["content"]}});
     if (messages.size() > 5) messages.erase(messages.begin() + 1, messages.end() - 4);
@@ -312,6 +313,7 @@ static json chat(const json &history) {
         if (asks_for_action(q))
             ctx += "\nNOTE: the technician is asking you to act on the machine. You cannot; say so first.";
         last["content"] = "CONTEXT\n" + ctx + "\n\nQUESTION\n" + q;
+        context_used = ctx;
     }
 
     // The URL is a local endpoint such as http://127.0.0.1:8081
@@ -322,7 +324,8 @@ static json chat(const json &history) {
     int prompt_tokens = 0, completion_tokens = 0;
     for (int round = 0; round < g_cfg.max_rounds; round++) {
         json req = {{"model", "foreman"}, {"messages", messages}, {"tools", tool_specs()}, {"tool_choice", "auto"},
-                    {"temperature", 0.2}, {"max_tokens", g_cfg.max_tokens}};
+                    {"temperature", 0.2}, {"max_tokens", g_cfg.max_tokens},
+                    {"chat_template_kwargs", {{"enable_thinking", false}}}}; // models with a reasoning mode answer directly
         auto res = cli.Post("/v1/chat/completions", req.dump(), "application/json");
         if (!res || res->status != 200) {
             answer = "The local model is not responding (" + (res ? std::to_string(res->status) : httplib::to_string(res.error())) + ").";
@@ -353,7 +356,7 @@ static json chat(const json &history) {
     if (answer.empty()) answer = "I could not finish that within the tool-call limit; please ask more specifically.";
     double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     g_busy = 0;
-    return {{"answer", answer}, {"tools", trace}, {"seconds", secs},
+    return {{"answer", answer}, {"tools", trace}, {"seconds", secs}, {"context", context_used},
             {"prompt_tokens", prompt_tokens}, {"completion_tokens", completion_tokens}};
 }
 

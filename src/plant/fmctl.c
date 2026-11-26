@@ -40,14 +40,15 @@ int main(int argc, char **argv) {
     struct fm_ctl *ctl = mmap(NULL, sizeof *ctl, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     close(fd);
     if (ctl == MAP_FAILED) { perror("mmap"); return 1; }
-    char cmd[sizeof ctl->cmd] = "";
+    char cmd[sizeof ctl->cmd[0]] = "";
     for (int i = 1; i < argc; i++) {
         strncat(cmd, argv[i], sizeof cmd - strlen(cmd) - 1);
         if (i + 1 < argc) strncat(cmd, " ", sizeof cmd - strlen(cmd) - 1);
     }
-    memcpy(ctl->cmd, cmd, sizeof cmd);
+    uint32_t h = ctl->head;
+    memcpy(ctl->cmd[h % FM_CTL_Q], cmd, sizeof cmd);
     __atomic_thread_fence(__ATOMIC_RELEASE);
-    ctl->seq++;
+    ctl->head = h + 1;
     printf("sent: %s\n", cmd);
     return 0;
 }
