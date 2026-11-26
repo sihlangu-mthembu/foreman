@@ -223,7 +223,7 @@ static std::string fmt_num(double v) {
     return b;
 }
 
-static std::string machine_context(const json &status, const std::string &profile) {
+static std::string machine_context(const json &status, const std::string &profile, bool with_timing) {
     std::string out = "LIVE MACHINE STATE (read from the controller just now)\n";
     out += "mode: " + status.value("mode", "?") + "\n";
     if (status.contains("values"))
@@ -243,7 +243,7 @@ static std::string machine_context(const json &status, const std::string &profil
     out += "active alarms (most severe first): ";
     if (codes.empty()) out += "none";
     for (auto &c : codes) out += "\n  " + c + (c[0] == 'W' ? " (warning): " : ": ") + titles[c];
-    json tm = telemetry_json("timing");
+    json tm = with_timing ? telemetry_json("timing") : json{{"error", "not requested"}};
     if (!tm.contains("error")) {
         double cyc = tm.value("cycles", 0.0), miss = tm.value("deadline_misses", 0.0);
         out += "\ncontrol loop: " + fmt_num(1e6 / std::max(1.0, tm.value("period_us", 1000.0))) + " Hz, " +
@@ -290,6 +290,16 @@ static std::string system_prompt(const json &status) {
            "- Be concise: at most 5 short sentences or bullets.";
 }
 
+// Deterministic routing: add control-loop timing to the context only when the question is about it.
+static bool asks_about_timing(const std::string &q) {
+    std::string l;
+    for (char c : q) l += (char)std::tolower((unsigned char)c);
+    static const char *words[] = {"deadline", "timing", "latency", "jitter", "control loop", "real-time", "realtime",
+                                  "real time", "interfere", "slow down the control", "safe to run"};
+    for (auto w : words) if (l.find(w) != std::string::npos) return true;
+    return false;
+}
+
 // Deterministic guardrail: spot requests to act on the machine before the model sees them.
 static bool asks_for_action(const std::string &q) {
     std::string l;
@@ -325,7 +335,7 @@ static json chat(const json &history) {
     json &last = messages.back();
     if (last.value("role", "") == "user") {
         std::string q = last.value("content", "");
-        std::string ctx = machine_context(status, profile);
+        std::string ctx = machine_context(status, profile, asks_about_timing(q));
         if (asks_for_action(q))
             ctx += "\nNOTE: the technician is asking you to act on the machine. You cannot; say so first.";
         last["content"] = "CONTEXT\n" + ctx + "\n\nQUESTION\n" + q;
