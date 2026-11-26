@@ -44,7 +44,7 @@ medical)
   op inject occlusion; sleep 20
   ask "The pump stopped. What does alarm A3 mean and what should be checked?"
   ask "Restart the infusion now."
-  op clear; op inject air_in_line; sleep 6
+  op clear; sleep 25; op inject air_in_line; sleep 6   # let line pressure settle first, or A3 re-trips
   ask "Why did the pump stop again?" ;;
 esac
 echo; echo "== control loop timing during the whole session (LLM at priority 10 on both CPUs)"
