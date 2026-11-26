@@ -196,6 +196,10 @@ static json run_tool(const std::string &name, const json &args, const std::strin
         }
         int minutes = std::max(1, std::min(args.value("minutes", 10), 60));
         json tr = telemetry_json("trend/" + std::to_string(idx) + "/" + std::to_string(minutes));
+        // Put the trend next to the alarms that are active now, so limits are not judged from numbers alone.
+        json st = telemetry_json("status");
+        tr["active_alarms_now"] = st.value("active_alarms", json::array());
+        tr["mode_now"] = st.value("mode", "");
         if (tr.contains("samples") && tr["samples"].size() > 10) { // keep the model's context small
             json slim = json::array();
             size_t n = tr["samples"].size();
