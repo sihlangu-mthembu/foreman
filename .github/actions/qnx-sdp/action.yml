@@ -26,8 +26,14 @@ runs:
       shell: bash
       env: { MYQNX_USER: "${{ inputs.user }}", MYQNX_PASSWORD: "${{ inputs.password }}", K: "${{ inputs.key }}" }
       run: |
-        KEYARG=(); [ -n "$K" ] && KEYARG=(-addLicenseKey "$K")
-        /home/runner/qnx/qnxsoftwarecenter/qnxsoftwarecenter_clt -syncLicenseKeys -myqnx.user="$MYQNX_USER" -myqnx.password="$MYQNX_PASSWORD" "${KEYARG[@]}" | tail -2
+        # QNX Software Center prints licence keys. Logs of public repositories are public, so its output
+        # is never shown: only a redacted summary.
+        [ -n "$K" ] || { echo "SDP800_LICENSE_KEY secret is required"; exit 1; }
+        /home/runner/qnx/qnxsoftwarecenter/qnxsoftwarecenter_clt -syncLicenseKeys -myqnx.user="$MYQNX_USER" \
+          -myqnx.password="$MYQNX_PASSWORD" -addLicenseKey "$K" > /tmp/qsc-licence.log 2>&1 || true
+        sed -E 's/[A-Z0-9]{4}(-[A-Z0-9]{4}){4}/[licence key redacted]/g' /tmp/qsc-licence.log | grep -i -E "error|added|activated" | tail -3
+        rm -f /tmp/qsc-licence.log
+        ls ~/.qnx/license/licenses > /dev/null && echo "licence installed"
     - name: SDP packages (cache miss only)
       if: steps.sdp.outputs.cache-hit != 'true'
       shell: bash
@@ -35,4 +41,5 @@ runs:
       run: |
         /home/runner/qnx/qnxsoftwarecenter/qnxsoftwarecenter_clt -mirror -cleanInstall -destination /home/runner/qnx/800 \
           -installBaseline com.qnx.qnx800 -installPackage com.qnx.qnx800.target.qemuvirt,com.qnx.qnx800.target.driver.virtio \
-          -myqnx.user="$MYQNX_USER" -myqnx.password="$MYQNX_PASSWORD" | tail -3
+          -myqnx.user="$MYQNX_USER" -myqnx.password="$MYQNX_PASSWORD" 2>&1 \
+          | sed -E 's/[A-Z0-9]{4}(-[A-Z0-9]{4}){4}/[licence key redacted]/g' | tail -3
