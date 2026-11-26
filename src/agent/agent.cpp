@@ -230,11 +230,14 @@ static std::string machine_context(const json &status, const std::string &profil
         for (auto &kv : status["values"].items())
             out += kv.key() + " = " + fmt_num(kv.value().value("value", 0.0)) + " " + kv.value().value("unit", "") + "\n";
     json alarms = status.value("active_alarms", json::array());
+    json ev = telemetry_json("events");
+    std::map<std::string, std::string> titles;
+    if (ev.contains("events"))
+        for (auto &e : ev["events"]) if (e.value("kind", "") == "alarm") titles[e.value("code", "")] = e.value("text", "");
     out += "active alarms: ";
     if (alarms.empty()) out += "none";
-    for (auto &a : alarms) out += a.get<std::string>() + " ";
+    for (auto &a : alarms) out += "\n  " + a.get<std::string>() + ": " + titles[a.get<std::string>()];
     out += "\n\nRECENT EVENTS (seconds since controller start; now = " + fmt_num(status.value("uptime_s", 0.0)) + " s)\n";
-    json ev = telemetry_json("events");
     if (ev.contains("events")) {
         auto &e = ev["events"];
         size_t start = e.size() > 6 ? e.size() - 6 : 0;
@@ -254,18 +257,32 @@ static std::string machine_context(const json &status, const std::string &profil
     return out;
 }
 
-static std::string system_prompt(const json &status, const std::string &profile) {
+static std::string system_prompt(const json &status) {
+    // Static per machine, so llama-server can reuse its KV cache for this prefix (and the tool list) on
+    // every question; only the live context below changes.
     std::string machine = status.value("machine", "the machine");
     return "You are Foreman, an offline maintenance assistant running on the controller of " + machine + ".\n"
            "Rules:\n"
-           "- Base every statement about the machine on the LIVE MACHINE STATE, RECENT EVENTS and MANUAL below, or on "
-           "tool results. Quote real values with units. Never invent values or events.\n"
-           "- Use get_trend for questions about change over time, search_manual for procedures or codes not shown "
-           "below, get_control_timing for questions about the control loop.\n"
-           "- You are READ-ONLY: you cannot start, stop, reset, restart or change anything. If asked to, say so and "
-           "give the manual's procedure for the technician to follow at the operator panel.\n"
-           "- Be concise: at most 5 short sentences or bullets.\n\n" +
-           machine_context(status, profile);
+           "- Each question comes with a CONTEXT block read from the controller at that moment. Base every statement "
+           "about the machine on it or on tool results. Quote real values with units. Never invent values or events.\n"
+           "- When an alarm is active, explain it using its MANUAL entry: what happened, the likely cause, and the safe "
+           "procedure.\n"
+           "- Use get_trend for questions about change over time, search_manual for procedures or codes not in the "
+           "context, get_control_timing for questions about the control loop.\n"
+           "- You are READ-ONLY: you cannot start, stop, reset, restart or change anything. If asked to, say plainly "
+           "that you cannot, then give the manual's procedure for the technician to follow at the operator panel.\n"
+           "- Be concise: at most 5 short sentences or bullets.";
+}
+
+// Deterministic guardrail: spot requests to act on the machine before the model sees them.
+static bool asks_for_action(const std::string &q) {
+    std::string l;
+    for (char c : q) l += (char)std::tolower((unsigned char)c);
+    static const char *verbs[] = {"restart", "reset", "start the", "start it", "stop the", "stop it", "shut down", "turn off",
+                                  "turn on", "increase", "decrease", "raise the", "lower the", "set the", "change the",
+                                  "clear the alarm", "clear alarm", "override", "bypass", "speed up", "slow down"};
+    for (auto v : verbs) if (l.find(v) != std::string::npos) return true;
+    return false;
 }
 
 static std::mutex g_llm_mutex;
@@ -283,10 +300,19 @@ static json chat(const json &history) {
                 {"tools", json::array()}, {"seconds", 0.0}, {"prompt_tokens", 0}, {"completion_tokens", 0}};
     }
     std::string profile = status.value("profile", "industrial");
-    json messages = json::array({{{"role", "system"}, {"content", system_prompt(status, profile)}}});
+    json messages = json::array({{{"role", "system"}, {"content", system_prompt(status)}}});
     for (auto &m : history) // keep only the last few turns: small context on a small device
         if (m.contains("role") && m.contains("content")) messages.push_back({{"role", m["role"]}, {"content", m["content"]}});
-    if (messages.size() > 7) messages.erase(messages.begin() + 1, messages.end() - 6);
+    if (messages.size() > 5) messages.erase(messages.begin() + 1, messages.end() - 4);
+    // Live context travels with the newest question.
+    json &last = messages.back();
+    if (last.value("role", "") == "user") {
+        std::string q = last.value("content", "");
+        std::string ctx = machine_context(status, profile);
+        if (asks_for_action(q))
+            ctx += "\nNOTE: the technician is asking you to act on the machine. You cannot; say so first.";
+        last["content"] = "CONTEXT\n" + ctx + "\n\nQUESTION\n" + q;
+    }
 
     // The URL is a local endpoint such as http://127.0.0.1:8081
     httplib::Client cli(g_cfg.llm);

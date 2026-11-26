@@ -242,7 +242,7 @@ static void usage(void) {
     fprintf(stderr,
             "usage: fm-plant [-p profile] [-P priority] [-c cpu] [-d seconds] [-r]\n"
             "  -p  machine profile: %s (default industrial)\n"
-            "  -P  SCHED_FIFO priority of the control loop (default 60)\n"
+            "  -P  SCHED_FIFO priority of the control loop (default 70: above the 1-63 range open to unprivileged processes)\n"
             "  -c  pin the loop to one CPU (default: any)\n"
             "  -d  run for N seconds then exit (benchmarks)\n"
             "  -r  print a JSON timing report on exit\n",
@@ -251,7 +251,7 @@ static void usage(void) {
 
 int main(int argc, char **argv) {
     const char *pname = "industrial";
-    int prio = 60, cpu = -1, report = 0;
+    int prio = 70, cpu = -1, report = 0;
     double duration = 0;
     int c;
     while ((c = getopt(argc, argv, "p:P:c:d:rh")) != -1) {

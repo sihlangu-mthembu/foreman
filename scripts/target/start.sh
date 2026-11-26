@@ -1,6 +1,7 @@
 #!/bin/sh
 # Start the Foreman stack on the QNX target. Run as root from the install directory.
-#   fm-plant       root, SCHED_FIFO priority 60   (safety-critical control loop)
+#   fm-plant       root, SCHED_FIFO priority 70   (safety-critical control loop; above 63, the ceiling for
+#                                                  unprivileged processes, so no user process can outrank it)
 #   fm-telemetryd  root, priority 20              (read-only /dev/foreman service)
 #   llama-server   qnxuser, priority 10           (local LLM, both CPUs)
 #   fm-agent       qnxuser, priority 10           (assistant + dashboard, abilities dropped)
@@ -11,7 +12,7 @@ D=$(cd "$(dirname "$0")" && pwd)
 cd "$D"
 slay -f fm-agent llama-server fm-telemetryd fm-plant 2>/dev/null
 sleep 1
-on -p 60f ./fm-plant -p "$PROFILE" -P 60 > /tmp/fm-plant.log 2>&1 &
+on -p 70f ./fm-plant -p "$PROFILE" -P 70 > /tmp/fm-plant.log 2>&1 &
 sleep 1
 on -p 20 ./fm-telemetryd /dev/foreman > /tmp/fm-telemetryd.log 2>&1 &
 sleep 1
