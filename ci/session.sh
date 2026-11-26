@@ -11,6 +11,8 @@ for i in $(seq 1 90); do $ROOT "curl -sf http://127.0.0.1:8081/health" >/dev/nul
 echo "== processes and priorities"; $ROOT "pidin -f anpN | grep -E 'fm-|llama' | head -20"
 echo "== /dev/foreman (read-only service)"; $ROOT "ls -la /dev/foreman; cat /dev/foreman/status"
 echo "== write attempt as qnxuser (must fail)"; ci/qnx-ssh.sh run "echo stop > /dev/foreman/status; echo exit=\$?"
+echo "== sporadic scheduling as an unprivileged user (priority 10, 50 ms budget per 100 ms, then 5)"
+ci/qnx-ssh.sh run "on -p 10s:5:4:100:50 sleep 3 & sleep 1; pidin -f anpN | grep -w sleep; wait"
 echo "== ctl attempt as qnxuser (must fail)"; ci/qnx-ssh.sh run "cd $F && ./fmctl inject jam; echo exit=\$?"
 
 ask() {
