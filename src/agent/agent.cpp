@@ -32,7 +32,7 @@ extern "C" {
 }
 #endif
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json; // keep the machine's signal order
 
 struct config {
     std::string host = "0.0.0.0";

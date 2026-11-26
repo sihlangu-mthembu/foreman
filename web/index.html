@@ -1,1 +1,235 @@
-<!doctype html><title>Foreman</title><p>dashboard coming</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foreman</title>
+<style>
+/* Grey-first palette after ISA-101 high-performance HMI practice: colour is reserved for abnormal states
+   and for the assistant, so an alarm is the brightest thing on screen. Offline device: system fonts only. */
+:root {
+  --bg: #cfd2d5;
+  --panel: #e4e6e8;
+  --line: #b4b8bc;
+  --ink: #1e2227;
+  --ink-2: #565c63;
+  --trace: #3d6a96;      /* normal data lines and the assistant */
+  --warn: #c98a12;
+  --alarm: #b3261e;
+  --ok-ink: #1e2227;
+  --font: "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); }
+body { font-size: 15px; line-height: 1.4; }
+button, input { font: inherit; }
+:focus-visible { outline: 3px solid var(--trace); outline-offset: 2px; }
+
+.top { display: flex; align-items: baseline; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.top h1 { font-size: 20px; margin: 0; letter-spacing: .02em; font-weight: 700; }
+.top .machine { color: var(--ink-2); }
+.mode { margin-left: auto; padding: 3px 12px; border: 1px solid var(--ink-2); font-weight: 700; }
+.mode.derated { background: var(--warn); border-color: var(--warn); color: #fff; }
+.mode.stopped { background: var(--alarm); border-color: var(--alarm); color: #fff; }
+
+main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); gap: 1px; background: var(--line); min-height: calc(100vh - 47px); }
+section { background: var(--bg); padding: 14px 18px; }
+h2 { font-size: 13px; font-weight: 700; color: var(--ink-2); margin: 0 0 8px; letter-spacing: .04em; }
+
+.alarms { min-height: 34px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+.alarm { padding: 6px 10px; color: #fff; background: var(--alarm); font-weight: 600; }
+.alarm.warn { background: var(--warn); }
+.alarms .none { color: var(--ink-2); padding: 6px 0; }
+
+.signals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.sig { background: var(--panel); padding: 8px 10px 6px; }
+.sig .name { color: var(--ink-2); font-size: 13px; }
+.sig .val { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sig .unit { font-size: 13px; color: var(--ink-2); margin-left: 4px; font-weight: 400; }
+.sig canvas { width: 100%; height: 34px; display: block; }
+
+.loop { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: end; margin-top: 16px; padding: 12px; background: var(--panel); border: 1px solid var(--line); }
+.misses { font-size: 64px; line-height: .9; font-weight: 700; font-variant-numeric: tabular-nums; }
+.misses.bad { color: var(--alarm); }
+.misses-label { color: var(--ink-2); font-size: 13px; margin-top: 6px; }
+.loop dl { display: grid; grid-template-columns: repeat(4, auto); gap: 2px 18px; margin: 0 0 8px; }
+.loop dt { color: var(--ink-2); font-size: 12px; }
+.loop dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+#hist { width: 100%; height: 70px; display: block; }
+
+.events { margin-top: 16px; max-height: 190px; overflow: auto; border-top: 1px solid var(--line); }
+.ev { display: grid; grid-template-columns: 64px 54px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.ev .t { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ev.alarm-ev .c { color: var(--alarm); font-weight: 700; }
+.ev.warn-ev .c { color: var(--warn); font-weight: 700; }
+.ev.op .c { color: var(--ink-2); }
+
+.chat { display: flex; flex-direction: column; height: calc(100vh - 47px); padding-bottom: 0; }
+.log { flex: 1; overflow: auto; padding-right: 4px; }
+.msg { margin: 0 0 14px; }
+.msg.user { font-weight: 700; }
+.msg.user::before { content: "Technician  "; font-weight: 400; color: var(--ink-2); font-size: 12px; display: block; }
+.msg.bot { border-left: 3px solid var(--trace); padding-left: 10px; white-space: pre-wrap; }
+.msg.bot .looked { display: block; color: var(--trace); font-size: 13px; margin-bottom: 4px; }
+.msg.bot .meta { display: block; color: var(--ink-2); font-size: 12px; margin-top: 4px; }
+.msg.thinking { color: var(--ink-2); border-left: 3px dashed var(--trace); padding-left: 10px; }
+form { display: flex; gap: 8px; padding: 12px 0 14px; border-top: 1px solid var(--line); background: var(--bg); }
+input[type=text] { flex: 1; padding: 9px 10px; border: 1px solid var(--ink-2); background: #f2f3f4; color: var(--ink); }
+button { padding: 9px 16px; border: 1px solid var(--trace); background: var(--trace); color: #fff; font-weight: 700; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+.ro { color: var(--ink-2); font-size: 12px; margin: 0 0 10px; }
+
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+  .chat { height: auto; min-height: 70vh; }
+  .signals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Foreman</h1>
+  <span class="machine" id="machine">connecting…</span>
+  <span class="mode" id="mode">–</span>
+</header>
+<main>
+  <section aria-label="Machine">
+    <h2>Active alarms</h2>
+    <div class="alarms" id="alarms" aria-live="polite"></div>
+    <h2>Machine signals (last 5 min)</h2>
+    <div class="signals" id="signals"></div>
+
+    <div class="loop" aria-label="Control loop timing">
+      <div>
+        <div class="misses" id="misses">–</div>
+        <div class="misses-label">control deadlines missed</div>
+      </div>
+      <div>
+        <dl>
+          <dt>Loop rate</dt><dd id="rate">–</dd>
+          <dt>Cycles</dt><dd id="cycles">–</dd>
+          <dt>Wake latency p99</dt><dd id="p99">–</dd>
+          <dt>Worst wake latency</dt><dd id="max">–</dd>
+        </dl>
+        <canvas id="hist" aria-label="Wake latency histogram"></canvas>
+      </div>
+    </div>
+
+    <h2 style="margin-top:16px">Event log</h2>
+    <div class="events" id="events"></div>
+  </section>
+
+  <section class="chat" aria-label="Ask Foreman">
+    <h2>Ask Foreman</h2>
+    <p class="ro">Runs on this controller, offline. Read-only: it can look at the machine and the manual, never change them.</p>
+    <div class="log" id="log" aria-live="polite"></div>
+    <form id="ask">
+      <input type="text" id="q" autocomplete="off" placeholder="e.g. Why did the line stop?" aria-label="Question">
+      <button id="send">Ask</button>
+    </form>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 1) => Number(v).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+let sigNames = [], history = [], trends = {};
+
+function codeClass(code) { return /^(W|w)/.test(code) ? 'alarm warn' : 'alarm'; }
+
+function drawSpark(canvas, pts) {
+  const r = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * r; canvas.height = h * r;
+  const g = canvas.getContext('2d'); g.scale(r, r); g.clearRect(0, 0, w, h);
+  if (!pts || pts.length < 2) return;
+  const ys = pts.map(p => p[1]); let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+  g.strokeStyle = getComputedStyle(document.body).getPropertyValue('--trace'); g.lineWidth = 1.5; g.beginPath();
+  pts.forEach((p, i) => { const x = i / (pts.length - 1) * (w - 2) + 1, y = h - 3 - (p[1] - lo) / (hi - lo) * (h - 6); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+  g.stroke();
+}
+
+function drawHist(canvas, hist, bin) {
+  const r = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * r; canvas.height = h * r;
+  const g = canvas.getContext('2d'); g.scale(r, r); g.clearRect(0, 0, w, h);
+  const n = 100, bw = w / n, max = Math.max(1, ...hist);
+  const ink = getComputedStyle(document.body).getPropertyValue('--ink-2');
+  hist.forEach((c, i) => {
+    if (!c) return;
+    const bh = Math.max(1, Math.log10(c + 1) / Math.log10(max + 1) * (h - 14));
+    g.fillStyle = i === n - 1 ? getComputedStyle(document.body).getPropertyValue('--alarm') : ink;
+    g.fillRect(i * bw, h - 12 - bh, Math.max(1, bw - 1), bh);
+  });
+  g.fillStyle = ink; g.font = '11px ' + getComputedStyle(document.body).fontFamily;
+  g.fillText('0 µs', 0, h - 1); const mid = (n * bin / 2) + ' µs'; g.fillText(mid, w / 2 - g.measureText(mid).width / 2, h - 1); const end = '≥ ' + (n * bin) + ' µs'; g.fillText(end, w - g.measureText(end).width - 1, h - 1);
+}
+
+async function live() {
+  try {
+    const d = await (await fetch('/api/live')).json();
+    const s = d.status, t = d.timing;
+    $('machine').textContent = s.machine;
+    $('mode').textContent = s.mode.toUpperCase();
+    $('mode').className = 'mode ' + s.mode;
+    const names = Object.keys(s.values);
+    if (names.join() !== sigNames.join()) {
+      sigNames = names;
+      $('signals').innerHTML = names.map((n, i) =>
+        `<div class="sig"><div class="name">${n.replace(/_/g, ' ')}</div><div class="val"><span id="v${i}">–</span><span class="unit">${s.values[n].unit}</span></div><canvas id="c${i}"></canvas></div>`).join('');
+    }
+    names.forEach((n, i) => { $('v' + i).textContent = fmt(s.values[n].value, Math.abs(s.values[n].value) >= 100 ? 0 : 1); });
+    const evs = (d.events.events || []);
+    const titles = {}; evs.forEach(e => { if (e.kind === 'alarm') titles[e.code] = e.text; });
+    $('alarms').innerHTML = s.active_alarms.length
+      ? s.active_alarms.map(c => `<div class="${codeClass(c)}">${c} · ${titles[c] || ''}</div>`).join('')
+      : '<div class="none">No active alarms</div>';
+    $('misses').textContent = Number(t.deadline_misses).toLocaleString();
+    $('misses').className = 'misses' + (t.deadline_misses > 0 ? ' bad' : '');
+    $('rate').textContent = (1e6 / t.period_us).toLocaleString() + ' Hz';
+    $('cycles').textContent = Number(t.cycles).toLocaleString();
+    $('p99').textContent = t.p99_wake_latency_us + ' µs';
+    $('max').textContent = fmt(t.max_wake_latency_us, 0) + ' µs';
+    drawHist($('hist'), t.hist || [], t.hist_bin_us || 10);
+    $('events').innerHTML = evs.slice().reverse().map(e =>
+      `<div class="ev ${e.kind === 'alarm' ? (/^W/.test(e.code) ? 'warn-ev' : 'alarm-ev') : e.kind === 'operator' ? 'op' : ''}"><span class="t">${fmt(e.t_s, 1)} s</span><span class="c">${e.code}</span><span>${e.kind === 'cleared' ? 'cleared' : e.text}</span></div>`).join('');
+  } catch (e) { $('machine').textContent = 'telemetry unavailable'; }
+}
+
+async function trend() {
+  for (let i = 0; i < sigNames.length; i++) {
+    try { const tr = await (await fetch('/api/trend/' + i + '?minutes=5')).json(); drawSpark($('c' + i), tr.samples); } catch (e) {}
+  }
+}
+
+function addMsg(cls, html) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; $('log').appendChild(d); $('log').scrollTop = 1e9; return d; }
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function describe(t) {
+  const a = t.args || {};
+  if (t.tool === 'get_trend') return `${a.signal} trend, ${a.minutes || 10} min`;
+  if (t.tool === 'search_manual') return `manual: “${a.query}”`;
+  return { get_status: 'live values', get_events: 'event log', get_control_timing: 'loop timing' }[t.tool] || t.tool;
+}
+
+$('ask').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const q = $('q').value.trim(); if (!q) return;
+  $('q').value = ''; $('send').disabled = true;
+  addMsg('user', esc(q));
+  history.push({ role: 'user', content: q });
+  const wait = addMsg('thinking', 'Looking at the machine…');
+  try {
+    const r = await (await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history.slice(-6) }) })).json();
+    wait.remove();
+    const looked = r.tools.length ? `<span class="looked">Checked: ${r.tools.map(describe).map(esc).join(' · ')}</span>` : '';
+    addMsg('bot', looked + esc(r.answer) + `<span class="meta">${fmt(r.seconds, 1)} s on this controller · ${r.completion_tokens} tokens</span>`);
+    history.push({ role: 'assistant', content: r.answer });
+  } catch (e) { wait.textContent = 'The assistant is not reachable.'; }
+  $('send').disabled = false; $('q').focus();
+});
+
+live(); setInterval(live, 1000);
+setTimeout(trend, 1500); setInterval(trend, 5000);
+</script>
+</body>
+</html>

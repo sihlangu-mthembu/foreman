@@ -11,7 +11,7 @@ D=$(cd "$(dirname "$0")" && pwd)
 cd "$D"
 slay -f fm-agent llama-server fm-telemetryd fm-plant 2>/dev/null
 sleep 1
-on -p 60r ./fm-plant -p "$PROFILE" -P 60 > /tmp/fm-plant.log 2>&1 &
+on -p 60f ./fm-plant -p "$PROFILE" -P 60 > /tmp/fm-plant.log 2>&1 &
 sleep 1
 on -p 20 ./fm-telemetryd /dev/foreman > /tmp/fm-telemetryd.log 2>&1 &
 sleep 1
