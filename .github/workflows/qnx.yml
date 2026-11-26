@@ -1,0 +1,119 @@
+name: qnx
+# Builds Foreman and the llama.cpp port for QNX 8.0, boots QNX in QEMU/KVM, runs a scripted technician
+# session through the agent, and optionally measures control-loop timing under AI load.
+#
+# Uses the repository owner's free non-commercial QNX licence (secrets MYQNX_USER / MYQNX_PASSWORD).
+# QNX software is never published from this workflow: caches stay private to the repository, and the
+# only artifacts are logs and JSON results produced by this project's code.
+# There is intentionally no pull_request trigger, so workflows from forks never see the secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      profile: { description: "industrial | automotive | medical", default: industrial }
+      model: { description: "qwen3-1.7b | qwen25-1.5b", default: qwen3-1.7b }
+      bench: { description: "run the timing experiment (~8 min)", type: boolean, default: true }
+  push:
+    branches: [main]
+    paths: ['src/**', 'profiles/**', 'web/**', 'scripts/**', 'port/**', 'ci/**', 'Makefile', '.github/**']
+concurrency: { group: qnx, cancel-in-progress: true }
+env:
+  LLAMA_TAG: b12778
+  PROFILE: ${{ inputs.profile || 'industrial' }}
+  MODEL: ${{ inputs.model || 'qwen3-1.7b' }}
+jobs:
+  system:
+    if: github.repository_owner == 'sihlangu-mthembu'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/qnx-sdp
+        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}" }
+      - name: Host tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build ccache qemu-system-x86 qemu-utils sshpass >/dev/null
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          echo "host: $(nproc) CPUs, $(free -g | awk '/Mem/{print $2}') GB RAM"
+          echo "LLAMA_KEY=llama-qnx-$LLAMA_TAG-$(cat port/llama.cpp/0001-qnx-port.patch port/llama.cpp/build.sh port/llama.cpp/qnx-x86_64.cmake | sha256sum | cut -c1-16)" >> $GITHUB_ENV
+      - name: llama.cpp for QNX (cache)
+        id: llama
+        uses: actions/cache@v4
+        with: { path: llama-bin, key: "${{ env.LLAMA_KEY }}" }
+      - name: Build llama.cpp for QNX (cache miss only)
+        if: steps.llama.outputs.cache-hit != 'true'
+        run: |
+          git clone -q --depth 1 --branch $LLAMA_TAG https://github.com/ggml-org/llama.cpp src-llama
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          port/llama.cpp/build.sh src-llama x86_64
+          mkdir -p llama-bin && cp src-llama/build-qnx-x86_64/bin/llama-server src-llama/build-qnx-x86_64/bin/llama-bench llama-bin/
+      - name: Save llama.cpp build
+        if: steps.llama.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with: { path: llama-bin, key: "${{ env.LLAMA_KEY }}" }
+      - name: Build Foreman for QNX
+        run: |
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          make QNX=1 -k -j2 > build.log 2>&1 || { grep -v "^cc: warning" build.log | tail -40; exit 1; }
+          ls -la build-qnx
+      - name: Model
+        id: model
+        uses: actions/cache@v4
+        with: { path: models, key: "models-${{ env.MODEL }}" }
+      - name: Download model (cache miss only)
+        if: steps.model.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p models
+          case "$MODEL" in
+            qwen25-1.5b) URL=https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf ;;
+            qwen3-1.7b)  URL=https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf ;;
+          esac
+          curl -sSL --retry 3 -o models/model.gguf "$URL"; ls -la models
+      - name: Boot QNX 8.0 in QEMU and deploy
+        run: |
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          mkdir -p img && (cd img && mkqnximage --type=qemu --arch=x86_64 --clean --force --noprompt \
+            --data-size=3000 --data-inodes=20000 2>&1 | grep -v "Broken pipe" | tail -2)
+          QRAM=3G QCPU=2 ci/qemu-up.sh img
+          ci/deploy.sh
+      - name: Technician session
+        run: ci/session.sh $PROFILE 2>&1 | tee session.log
+      - name: Timing experiment
+        if: inputs.bench || github.event_name == 'push'
+        run: ci/bench.sh 60 2>&1 | tee -a session.log
+      - name: Service logs
+        if: always()
+        run: |
+          for f in fm-plant fm-telemetryd llama-server fm-agent; do echo "== $f"; ci/qnx-ssh.sh run "tail -20 /tmp/$f.log" 2>/dev/null || true; done
+          kill $(cat img/qemu.pid) 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ env.PROFILE }}-${{ env.MODEL }}
+          path: |
+            session.log
+            results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  aarch64:
+    # Compile-only check of the llama.cpp port for 64-bit Arm (Raspberry Pi 4/5)
+    if: github.repository_owner == 'sihlangu-mthembu'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/qnx-sdp
+        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}" }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build >/dev/null
+      - name: Build llama.cpp for QNX aarch64le
+        run: |
+          git clone -q --depth 1 --branch $LLAMA_TAG https://github.com/ggml-org/llama.cpp src-llama
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          port/llama.cpp/build.sh src-llama aarch64le
+          file src-llama/build-qnx-aarch64le/bin/llama-server
+      - name: Build Foreman for QNX aarch64le
+        run: |
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          make QNX=1 QNXARCH=aarch64le OUT=build-qnx-aarch64le -k -j4 > build.log 2>&1 || { grep -v "^cc: warning" build.log | tail -40; exit 1; }
+          file build-qnx-aarch64le/*

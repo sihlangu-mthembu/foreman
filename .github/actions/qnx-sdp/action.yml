@@ -1,0 +1,38 @@
+name: qnx-sdp
+description: Restore or install QNX SDP 8.0 into /home/runner/qnx and sync the licence
+inputs:
+  user: { required: true }
+  password: { required: true }
+  key: { required: false, default: "" }
+runs:
+  using: composite
+  steps:
+    - name: Restore SDP cache
+      id: sdp
+      uses: actions/cache@v4
+      with: { path: /home/runner/qnx, key: qnx-sdp800-v1 }
+    - name: Install QSC + SDP (cache miss only)
+      if: steps.sdp.outputs.cache-hit != 'true'
+      shell: bash
+      env: { MYQNX_USER: "${{ inputs.user }}", MYQNX_PASSWORD: "${{ inputs.password }}" }
+      run: |
+        set -euo pipefail
+        Q=/home/runner/qnx; mkdir -p $Q ~/.qnx
+        C="curl -sS -4 --retry 4 --retry-delay 10 --retry-all-errors --connect-timeout 30 -A Mozilla/5.0"
+        $C --cookie-jar ~/.qnx/c.auth --form "userlogin=$MYQNX_USER" --form "password=$MYQNX_PASSWORD" -X POST https://www.qnx.com/account/login.html -o /dev/null
+        $C -L --cookie ~/.qnx/c.auth https://www.qnx.com/download/download/77351/qnx-setup-2.0.3-202408131717-linux.run -o qs.run
+        chmod +x qs.run && ./qs.run force-override disable-auto-start agree-to-license-terms $Q && rm -f qs.run ~/.qnx/c.auth
+    - name: Licence
+      shell: bash
+      env: { MYQNX_USER: "${{ inputs.user }}", MYQNX_PASSWORD: "${{ inputs.password }}", K: "${{ inputs.key }}" }
+      run: |
+        KEYARG=(); [ -n "$K" ] && KEYARG=(-addLicenseKey "$K")
+        /home/runner/qnx/qnxsoftwarecenter/qnxsoftwarecenter_clt -syncLicenseKeys -myqnx.user="$MYQNX_USER" -myqnx.password="$MYQNX_PASSWORD" "${KEYARG[@]}" | tail -2
+    - name: SDP packages (cache miss only)
+      if: steps.sdp.outputs.cache-hit != 'true'
+      shell: bash
+      env: { MYQNX_USER: "${{ inputs.user }}", MYQNX_PASSWORD: "${{ inputs.password }}" }
+      run: |
+        /home/runner/qnx/qnxsoftwarecenter/qnxsoftwarecenter_clt -mirror -cleanInstall -destination /home/runner/qnx/800 \
+          -installBaseline com.qnx.qnx800 -installPackage com.qnx.qnx800.target.qemuvirt,com.qnx.qnx800.target.driver.virtio \
+          -myqnx.user="$MYQNX_USER" -myqnx.password="$MYQNX_PASSWORD" | tail -3

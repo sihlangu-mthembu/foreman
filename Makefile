@@ -1,8 +1,9 @@
 # Native build (Linux, for development):   make
-# QNX 8.0 x86_64 (after sourcing qnxsdp-env.sh):   make QNX=1
+# QNX 8.0 (after sourcing qnxsdp-env.sh):   make QNX=1 [QNXARCH=x86_64|aarch64le]
 ifeq ($(QNX),1)
-  CC     = qcc -Vgcc_ntox86_64
-  CXX    = q++ -Vgcc_ntox86_64_cxx
+  QNXARCH ?= x86_64
+  CC     = qcc -Vgcc_nto$(QNXARCH)
+  CXX    = q++ -Vgcc_nto$(QNXARCH)_cxx
   LDLIBS_NET = -lsocket
   LDLIBS_THR =
   OUT   ?= build-qnx
