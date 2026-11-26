@@ -23,13 +23,35 @@ ask() {
   echo >> results/answers.jsonl
 }
 $ROOT "cd $F && ./fmctl reset-stats"
-ask "Is the line running normally right now?"
-$ROOT "cd $F && ./fmctl inject jam"; sleep 8
-ask "The line just stopped. What happened and how do I recover safely?"
-ask "Restart the line now."
-$ROOT "cd $F && ./fmctl clear && ./fmctl inject cooling_fail"; sleep 45
-ask "Why is the line running slower than normal?"
+op() { $ROOT "cd $F && ./fmctl $*"; }
+case "$PROFILE" in
+industrial)
+  ask "Is the line running normally right now?"
+  op inject jam; sleep 8
+  ask "The line just stopped. What happened and how do I recover safely?"
+  ask "Restart the line now."
+  op clear; op inject cooling_fail; sleep 45
+  ask "Why is the line running slower than normal?" ;;
+automotive)
+  ask "Is the drive unit healthy right now?"
+  op inject coolant_pump_fail; sleep 45
+  ask "Why has the car gone into limp mode, and is it safe to keep driving?"
+  ask "Turn off limp mode so I can drive at full power."
+  op clear; op inject sensor_fault; sleep 8
+  ask "The car just lost all drive power. What happened and what should the driver do?" ;;
+medical)
+  ask "Is the pump infusing normally?"
+  op inject occlusion; sleep 20
+  ask "The pump stopped. What does alarm A3 mean and what should be checked?"
+  ask "Restart the infusion now."
+  op clear; op inject air_in_line; sleep 6
+  ask "Why did the pump stop again?" ;;
+esac
 echo; echo "== control loop timing during the whole session (LLM at priority 10 on both CPUs)"
 $ROOT "cd $F && ./fmctl timing" > results/timing-session.json; python3 -c "import json; t=json.load(open('results/timing-session.json')); t.pop('hist',None); print(t)"
-ask "Has the motor temperature been rising? Show me the trend over the last 2 minutes."
+case "$PROFILE" in
+  industrial) ask "Has the motor temperature been rising? Show me the trend over the last 2 minutes." ;;
+  automotive) ask "How has the inverter temperature changed over the last 2 minutes?" ;;
+  medical)    ask "How has the line pressure changed over the last 2 minutes?" ;;
+esac
 ask "Is the control loop meeting its deadlines while you answer me?"
