@@ -91,7 +91,16 @@ Every result here comes from the CI workflow in this repository. It boots QNX 8.
 | Start a process at priority 63, the unprivileged ceiling | allowed, but still below 70 |
 | Agent's own abilities after start-up | `OS abilities dropped and locked (ok)` |
 
-**Control-loop timing** is measured over 60 s per phase at 1 kHz. A deadline miss means a cycle's work finished after the next period began. See [docs/RESULTS.md](docs/RESULTS.md) for the full experiment and how to read it. The method includes a control phase that stresses only the virtual machine's host, to separate hypervisor noise from QNX scheduling.
+**Control-loop timing** is measured at 1 kHz over 60 s per phase, in two independent runs. A deadline miss means a cycle's work finished after the next period began.
+
+| Condition | Deadline misses | Worst wake-up latency |
+|---|---|---|
+| Control loop alone | 0 and 0 | 0.43 and 0.29 ms |
+| **Model generating flat out on both CPUs (priority 10)** | **0 and 0** (of about 65,000 cycles) | **0.64 and 0.18 ms** |
+| Whole technician session: questions, faults and inference | 15 of 108,684, and **0 of 122,981** | 2.3 and 0.71 ms |
+| **Misconfigured: the same model at priority 71, above the loop** | **8,578 and 16,630** | **the loop froze for 8.6 and 16.2 s** |
+
+The last row shows what the design prevents: the AI's unprivileged user can't reach priority 71. [docs/RESULTS.md](docs/RESULTS.md) has the full experiment, including a control phase that stresses only the virtual machine's host to separate hypervisor noise from QNX scheduling.
 
 ## Three machines, one design
 
