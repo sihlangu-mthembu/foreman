@@ -26,6 +26,7 @@ jobs:
   system:
     if: github.repository_owner == 'sihlangu-mthembu'
     runs-on: ubuntu-24.04
+    permissions: { contents: write }   # only to publish demo recordings to the media branch
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -93,6 +94,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: inputs.record
         with: { name: "demo-${{ env.PROFILE }}", path: demo/, retention-days: 30 }
+      - name: Publish recording to the media branch (dashboard footage only)
+        if: inputs.record
+        run: |
+          mkdir -p /tmp/media && cd /tmp/media && git init -q -b media
+          git fetch -q --depth 1 "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" media 2>/dev/null && git checkout -q FETCH_HEAD -B media || true
+          mkdir -p "$PROFILE" && rm -f "$PROFILE"/* && cp $GITHUB_WORKSPACE/demo/* "$PROFILE"/
+          for f in "$PROFILE"/*.webm; do mv "$f" "$PROFILE/demo.webm"; done
+          git add -A && git -c user.name="foreman-ci" -c user.email="foreman-ci@users.noreply.github.com" commit -qm "Demo recording: $PROFILE (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" media
       - name: Timing experiment
         if: inputs.bench || github.event_name == 'push'
         run: ci/bench.sh 60 2>&1 | tee -a session.log
