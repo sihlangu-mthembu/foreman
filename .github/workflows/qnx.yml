@@ -3,7 +3,7 @@ name: qnx
 # session through the agent, and optionally measures control-loop timing under AI load.
 #
 # Uses the repository owner's free non-commercial QNX licence (secrets MYQNX_USER, MYQNX_PASSWORD,
-# SDP800_LICENSE_KEY). QNX tool output that can contain licence keys is redacted before it reaches the log.
+# MYQNX_LICENSE_KEY). QNX tool output that can contain licence keys is redacted before it reaches the log.
 # QNX software is never published from this workflow: caches stay private to the repository, and the
 # only artifacts are logs and JSON results produced by this project's code.
 # There is intentionally no pull_request trigger, so workflows from forks never see the secrets.
@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/qnx-sdp
-        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}", key: "${{ secrets.SDP800_LICENSE_KEY }}" }
+        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}", key: "${{ secrets.MYQNX_LICENSE_KEY }}" }
       - name: Host tools
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build ccache qemu-system-x86 qemu-utils sshpass >/dev/null
@@ -119,7 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/qnx-sdp
-        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}", key: "${{ secrets.SDP800_LICENSE_KEY }}" }
+        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}", key: "${{ secrets.MYQNX_LICENSE_KEY }}" }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build >/dev/null
       - name: Build llama.cpp for QNX aarch64le
         run: |
