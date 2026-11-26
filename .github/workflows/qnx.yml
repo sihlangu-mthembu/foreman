@@ -12,6 +12,7 @@ on:
       profile: { description: "industrial | automotive | medical", default: industrial }
       model: { description: "qwen3-1.7b | qwen25-1.5b", default: qwen3-1.7b }
       bench: { description: "run the timing experiment (~8 min)", type: boolean, default: true }
+      record: { description: "record the dashboard demo video", type: boolean, default: false }
   push:
     branches: [main]
     paths: ['src/**', 'profiles/**', 'web/**', 'scripts/**', 'port/**', 'ci/**', 'Makefile', '.github/**']
@@ -78,6 +79,19 @@ jobs:
           ci/deploy.sh
       - name: Technician session
         run: ci/session.sh $PROFILE 2>&1 | tee session.log
+      - name: Record dashboard demo
+        if: inputs.record
+        run: |
+          pip install -q --break-system-packages playwright && python3 -m playwright install --with-deps chromium > /dev/null
+          ssh_root() { sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -p 2222 root@127.0.0.1 "$@"; }
+          ssh_root "cd /data/home/qnxuser/foreman && ./start.sh $PROFILE 10"   # fresh machine state for the recording
+          for i in $(seq 1 60); do curl -sf localhost:8080/api/live >/dev/null && break; sleep 2; done
+          for i in $(seq 1 60); do ssh_root "curl -sf http://127.0.0.1:8081/health" >/dev/null 2>&1 && break; sleep 2; done
+          python3 ci/record-demo.py $PROFILE demo
+          ls -la demo
+      - uses: actions/upload-artifact@v4
+        if: inputs.record
+        with: { name: "demo-${{ env.PROFILE }}", path: demo/, retention-days: 30 }
       - name: Timing experiment
         if: inputs.bench || github.event_name == 'push'
         run: ci/bench.sh 60 2>&1 | tee -a session.log
