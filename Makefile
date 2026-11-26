@@ -11,7 +11,7 @@ else
   LDLIBS_NET =
   OUT   ?= build
 endif
-CFLAGS  += -O2 -Wall -Wextra -std=c11
+CFLAGS  += -O2 -Wall -Wextra -std=gnu11
 LDLIBS  += -lm
 
 COMMON = src/common/fm_json.c
@@ -26,7 +26,7 @@ all: $(OUT)/fm-plant $(OUT)/fmctl $(OUT)/fm-agent
 AGENT_DEFS = -DFM_TELEMETRY_DIRECT
 AGENT_SRC  = $(OUT)/fm_json.o
 endif
-CXXFLAGS += -O2 -Wall -std=c++17 -Ithird_party/cpp-httplib -Ithird_party
+CXXFLAGS += -O2 -Wall -std=gnu++17 -Ithird_party/cpp-httplib -Ithird_party
 
 $(OUT):
 	mkdir -p $(OUT)
