@@ -48,7 +48,7 @@ Each phase runs about 61,000–65,000 cycles.
 
 ## A note on the demo recording
 
-The demo video is recorded on the CI host with Chromium and Playwright, which encode video in real time. That puts heavy, bursty load on the host, the same effect as phase D. For recordings, the workflow therefore pins QEMU to host CPUs 2–3 and the browser to CPUs 0–1, and resets the loop statistics when the recording starts. A real controller has no screen recorder running on it. The timing experiment above runs without any pinning.
+The demo video is recorded on the CI host. Encoding video live would compete with the virtual machine for host CPU, the same effect as phase D. So the workflow captures Chrome's screencast frames during the scenario, which is cheap, and encodes them into an MP4 only after the QNX workload has stopped. The loop's timing during the recording is saved next to the video (`timing-during-recording.json`).
 
 ## Reproduce
 

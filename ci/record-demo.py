@@ -1,9 +1,15 @@
-"""Drive the Foreman dashboard through a scripted scenario and record it (video + screenshots).
+"""Drive the Foreman dashboard through a scripted scenario and record it (frames + screenshots).
+
+Frames come from Chrome's screencast (JPEG, only when the page changes), which costs far less CPU than
+encoding video live; ci/encode-demo.sh turns them into an MP4 after the QNX workload has finished, so
+the recording does not compete with the virtual machine for host CPU.
 
 Runs on the CI host against the QNX guest (dashboard forwarded to localhost:8080, SSH on 2222).
 Usage: python3 ci/record-demo.py <profile> <out dir>
 """
 import asyncio
+import base64
+import os
 import subprocess
 import sys
 import time
@@ -65,10 +71,22 @@ async def ask(page, question):
 async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(**({"executable_path": "/usr/bin/google-chrome", "args": ["--no-sandbox"]} if __import__("os").environ.get("LOCAL_CHROME") else {}))
-        ctx = await browser.new_context(viewport={"width": 1600, "height": 900}, device_scale_factor=1,
-                                        record_video_dir=OUT, record_video_size={"width": 1600, "height": 900})
+        ctx = await browser.new_context(viewport={"width": 1600, "height": 900}, device_scale_factor=1)
         page = await ctx.new_page()
+        os.makedirs(f"{OUT}/frames", exist_ok=True)
+        frames = []  # (wall-clock time, file)
+        cdp = await ctx.new_cdp_session(page)
+
+        async def on_frame(ev):
+            name = f"{OUT}/frames/{len(frames):06d}.jpg"
+            with open(name, "wb") as f:
+                f.write(base64.b64decode(ev["data"]))
+            frames.append((time.time(), name))
+            await cdp.send("Page.screencastFrameAck", {"sessionId": ev["sessionId"]})
+
+        cdp.on("Page.screencastFrame", lambda ev: asyncio.ensure_future(on_frame(ev)))
         await page.goto("http://localhost:8080/")
+        await cdp.send("Page.startScreencast", {"format": "jpeg", "quality": 85, "maxWidth": 1600, "maxHeight": 900})
         for action, arg in SCRIPTS[PROFILE]:
             if action == "wait":
                 await page.wait_for_timeout(arg * 1000)
@@ -87,7 +105,14 @@ async def main():
                     await page.wait_for_timeout(5000)
                     await page.screenshot(path=f"{OUT}/{PROFILE}-evidence.png")
                     await last.locator("summary").click()
-        await ctx.close()  # finalises the video file
+        await cdp.send("Page.stopScreencast")
+        frames.append((time.time(), frames[-1][1] if frames else ""))
+        with open(f"{OUT}/frames.ffconcat", "w") as f:  # each frame shown until the next one arrived
+            f.write("ffconcat version 1.0\n")
+            for (t, name), (t2, _) in zip(frames, frames[1:]):
+                f.write(f"file '{os.path.basename(name)}'\nduration {max(t2 - t, 0.001):.3f}\n")
+        print(f"{len(frames) - 1} frames over {frames[-1][0] - frames[0][0]:.0f} s", flush=True)
+        await ctx.close()
         await browser.close()
 
 

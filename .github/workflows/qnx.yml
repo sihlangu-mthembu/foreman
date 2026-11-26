@@ -77,8 +77,7 @@ jobs:
           source /home/runner/qnx/800/qnxsdp-env.sh
           mkdir -p img && (cd img && mkqnximage --type=qemu --arch=x86_64 --clean --force --noprompt \
             --data-size=3000 --data-inodes=20000 2>&1 | grep -v "Broken pipe" | tail -2)
-          # When recording, keep the VM on host CPUs 2-3 and the browser/video encoder on 0-1 (see docs/RESULTS.md)
-          QPIN="${{ inputs.record && '2,3' || '' }}" QRT="${{ inputs.record && '50' || '' }}" QRAM=3G QCPU=2 ci/qemu-up.sh img
+          QRAM=3G QCPU=2 ci/qemu-up.sh img
           ci/deploy.sh
       - name: Technician session
         run: ci/session.sh $PROFILE 2>&1 | tee session.log
@@ -91,8 +90,10 @@ jobs:
           for i in $(seq 1 60); do curl -sf localhost:8080/api/live >/dev/null && break; sleep 2; done
           for i in $(seq 1 60); do ssh_root "curl -sf http://127.0.0.1:8081/health" >/dev/null 2>&1 && break; sleep 2; done
           ssh_root "cd /data/home/qnxuser/foreman && ./fmctl reset-stats"
-          taskset -c 0,1 python3 ci/record-demo.py $PROFILE demo
-          ls -la demo
+          python3 ci/record-demo.py $PROFILE demo
+          ssh_root "cd /data/home/qnxuser/foreman && ./fmctl timing" > demo/timing-during-recording.json
+          ssh_root "slay -f llama-server fm-agent" || true   # stop the guest workload before encoding
+          sudo apt-get install -y -qq ffmpeg > /dev/null && ci/encode-demo.sh demo
       - uses: actions/upload-artifact@v4
         if: inputs.record
         with: { name: "demo-${{ env.PROFILE }}", path: demo/, retention-days: 30 }
@@ -102,7 +103,6 @@ jobs:
           mkdir -p /tmp/media && cd /tmp/media && git init -q -b media
           git fetch -q --depth 1 "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" media 2>/dev/null && git checkout -q FETCH_HEAD -B media || true
           mkdir -p "$PROFILE" && rm -f "$PROFILE"/* && cp $GITHUB_WORKSPACE/demo/* "$PROFILE"/
-          for f in "$PROFILE"/*.webm; do mv "$f" "$PROFILE/demo.webm"; done
           git add -A && git -c user.name="foreman-ci" -c user.email="foreman-ci@users.noreply.github.com" commit -qm "Demo recording: $PROFILE (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" media
       - name: Timing experiment
