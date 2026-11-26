@@ -1,0 +1,29 @@
+name: boot-probe
+# Which QEMU CPU models let QNX 8.0 boot on this kind of runner? Each job tries every model.
+on: workflow_dispatch
+jobs:
+  probe:
+    if: github.repository_owner == 'sihlangu-mthembu'
+    strategy: { fail-fast: false, matrix: { n: [1, 2, 3, 4] } }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/qnx-sdp
+        with: { user: "${{ secrets.MYQNX_USER }}", password: "${{ secrets.MYQNX_PASSWORD }}", key: "${{ secrets.MYQNX_LICENSE_KEY }}" }
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 >/dev/null
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          mkdir -p img && (cd img && mkqnximage --type=qemu --arch=x86_64 --clean --force --noprompt 2>&1 | tail -1)
+          cd img; echo "host CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
+          for cpu in host host,-la57 "host,-la57,-amx-tile,-amx-int8,-amx-bf16,-avx512f,-avx512vl,-avx512bw,-avx512dq,-avx512cd" \
+                     "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+avx,+avx2,+fma,+f16c,+bmi1,+bmi2,+movbe,+xsave"; do
+            rm -f console.log
+            timeout 60 qemu-system-x86_64 -smp 2 --enable-kvm --cpu $cpu -m 2G -kernel output/ifs.bin \
+              -drive file=output/disk-qemu.vmdk,if=ide -display none -serial file:console.log -nic none &
+            sleep 45; kill %1 2>/dev/null; wait 2>/dev/null
+            if grep -q "Startup complete" console.log; then r=BOOTS; elif grep -q "Shutdown\[" console.log; then r="STOPS ($(grep -m1 WARNING console.log))"; else r="no result: $(tail -2 console.log | tr '\n' ' ')"; fi
+            echo "RESULT cpu=$cpu -> $r"
+          done
