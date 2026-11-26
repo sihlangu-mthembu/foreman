@@ -48,7 +48,16 @@ Each phase runs about 61,000–65,000 cycles.
 
 ## A note on the demo recording
 
-The demo video is recorded on the CI host. Encoding video live would compete with the virtual machine for host CPU, the same effect as phase D. So the workflow captures Chrome's screencast frames during the scenario, which is cheap, and encodes them into an MP4 only after the QNX workload has stopped. The loop's timing during the recording is saved next to the video (`timing-during-recording.json`).
+The demo video is recorded on the CI host, and a browser on the host competes with the virtual machine for CPU, the same effect as phase D. The workflow keeps that small in three ways:
+- QEMU runs on host CPUs 2–3 and the browser on CPUs 0–1 (CPU affinity only).
+- Chrome's screencast frames are captured during the scenario instead of encoding video live.
+- The MP4 is encoded only after the QNX workload has stopped.
+
+The loop's timing during each recording is saved next to the video (`timing-during-recording.json`). In run 45908729309 it was 68 misses in 198,103 cycles (0.03%), with p99 wake-up latency of 30 µs. Earlier attempts show how much the recording setup matters:
+- Live encoding with no affinity split: 0.2–0.4% misses.
+- Giving QEMU's threads real-time priority starved QEMU's own I/O thread and made things far worse.
+
+A real controller has no screen recorder running on it. The timing experiment above runs without a browser and without any pinning.
 
 ## Reproduce
 
