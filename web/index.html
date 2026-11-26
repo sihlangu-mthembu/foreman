@@ -72,6 +72,9 @@ h2 { font-size: 13px; font-weight: 700; color: var(--ink-2); margin: 0 0 8px; le
 .msg.bot { border-left: 3px solid var(--trace); padding-left: 10px; white-space: pre-wrap; }
 .msg.bot .looked { display: block; color: var(--trace); font-size: 13px; margin-bottom: 4px; }
 .msg.bot .meta { display: block; color: var(--ink-2); font-size: 12px; margin-top: 4px; }
+.msg.bot details { margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+.msg.bot summary { cursor: pointer; color: var(--trace); }
+.msg.bot pre { white-space: pre-wrap; margin: 6px 0 0; padding: 8px; background: var(--panel); border: 1px solid var(--line); font-family: var(--font); font-size: 12px; max-height: 220px; overflow: auto; }
 .msg.thinking { color: var(--ink-2); border-left: 3px dashed var(--trace); padding-left: 10px; }
 form { display: flex; gap: 8px; padding: 12px 0 14px; border-top: 1px solid var(--line); background: var(--bg); }
 input[type=text] { flex: 1; padding: 9px 10px; border: 1px solid var(--ink-2); background: #f2f3f4; color: var(--ink); }
@@ -125,7 +128,7 @@ button:disabled { opacity: .5; cursor: default; }
     <p class="ro">Runs on this controller, offline. Read-only: it can look at the machine and the manual, never change them.</p>
     <div class="log" id="log" aria-live="polite"></div>
     <form id="ask">
-      <input type="text" id="q" autocomplete="off" placeholder="e.g. Why did the line stop?" aria-label="Question">
+      <input type="text" id="q" autocomplete="off" placeholder="Ask about the machine, an alarm or a procedure" aria-label="Question">
       <button id="send">Ask</button>
     </form>
   </section>
@@ -222,7 +225,8 @@ $('ask').addEventListener('submit', async ev => {
     const r = await (await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history.slice(-6) }) })).json();
     wait.remove();
     const looked = r.tools.length ? `<span class="looked">Checked: ${r.tools.map(describe).map(esc).join(' · ')}</span>` : '';
-    addMsg('bot', looked + esc(r.answer) + `<span class="meta">${fmt(r.seconds, 1)} s on this controller · ${r.completion_tokens} tokens</span>`);
+    const saw = r.context ? `<details><summary>What Foreman saw</summary><pre>${esc(r.context)}</pre></details>` : '';
+    addMsg('bot', looked + esc(r.answer) + `<span class="meta">${fmt(r.seconds, 1)} s on this controller · ${r.completion_tokens} tokens</span>` + saw);
     history.push({ role: 'assistant', content: r.answer });
   } catch (e) { wait.textContent = 'The assistant is not reachable.'; }
   $('send').disabled = false; $('q').focus();

@@ -58,7 +58,7 @@ static const struct fm_profile profiles[] = {
       {"inverter_temp", "degC"}, {"battery_soc", "%"}, {"phase_current", "A"}},
      180, 3.0f, 0.08f, 0, 0.3f, 3.0f, 5, 3.2f, 30, 0.2f, 12, AUX2_DRAIN, 62, 0.00002f,
      automotive_rules, N(automotive_rules), automotive_scen, N(automotive_scen)},
-    {"medical", "Infusion pump IP-2 (simulation for demonstration, not a medical device)",
+    {"medical", "Infusion pump IP-2 (simulation only, not a medical device)",
      {{"flow_setpoint", "mL/h"}, {"measured_flow", "mL/h"}, {"pump_motor", "%"},
       {"line_pressure", "mmHg"}, {"volume_infused", "mL"}, {"motor_current", "mA"}},
      125, 2.5f, 0.5f, 0, 0.2f, 1.5f, 40, 2.0f, 50, 0.25f, 4, AUX2_INTEGRAL, 0, 1.0f / 3600.0f,
