@@ -53,7 +53,13 @@ The demo video is recorded on the CI host, and a browser on the host competes wi
 - Chrome's screencast frames are captured during the scenario instead of encoding video live.
 - The MP4 is encoded only after the QNX workload has stopped.
 
-The loop's timing during each recording is saved next to the video (`timing-during-recording.json`). In run 45908729309 it was 68 misses in 198,103 cycles (0.03%), with p99 wake-up latency of 30 µs. Earlier attempts show how much the recording setup matters:
+The loop's timing during each recording is saved next to the video (`timing-during-recording.json`, on the `media` branch). For the current recordings:
+
+| Recording | Run | Misses | p99 wake-up latency |
+|---|---|---|---|
+| industrial | [45985812464](https://github.com/sihlangu-mthembu/foreman/actions/runs/45985812464) | 49 of 206,840 (0.024%) | 50 µs |
+| automotive | [45982834112](https://github.com/sihlangu-mthembu/foreman/actions/runs/45982834112) | 48 of 108,308 (0.044%) | 60 µs |
+| medical | [45982837636](https://github.com/sihlangu-mthembu/foreman/actions/runs/45982837636) | 64 of 80,789 (0.079%) | 70 µs | Earlier attempts show how much the recording setup matters:
 - Live encoding with no affinity split: 0.2–0.4% misses.
 - Giving QEMU's threads real-time priority starved QEMU's own I/O thread and made things far worse.
 
