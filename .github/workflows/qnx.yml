@@ -16,7 +16,7 @@ on:
       record: { description: "record the dashboard demo video", type: boolean, default: false }
   push:
     branches: [main]
-    paths: ['src/**', 'profiles/**', 'web/**', 'scripts/**', 'port/**', 'ci/**', 'Makefile', '.github/**']
+    paths: ['src/**', 'profiles/**', 'web/**', 'scripts/**', 'port/**', 'ci/**', 'Makefile', '.github/**', '!.github/workflows/qnx-ports-recipe.yml', '!.github/workflows/boot-probe.yml']
 concurrency: { group: qnx, cancel-in-progress: true }
 env:
   LLAMA_TAG: b12778
