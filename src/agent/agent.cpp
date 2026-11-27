@@ -255,6 +255,13 @@ static json run_tool(const std::string &name, const json &args, const std::strin
         double miss = t.value("deadline_misses", 0.0);
         t["all_deadlines_met"] = miss == 0;
         t["verdict"] = miss == 0 ? "all deadlines met" : "some deadlines missed: " + fmt_int(miss) + " in this window";
+        double cyc = t.value("cycles", 0.0);
+        char pct[32], lat[160];
+        snprintf(pct, sizeof pct, "%.3g", cyc > 0 ? 100.0 * miss / cyc : 0.0);
+        snprintf(lat, sizeof lat, "wake-up latency: mean %.1f microseconds, 99th percentile %.0f microseconds, worst %.2f milliseconds",
+                 t.value("mean_wake_latency_us", 0.0), t.value("p99_wake_latency_us", 0.0), t.value("max_wake_latency_us", 0.0) / 1000.0);
+        t["in_words"] = (miss == 0 ? "All " + fmt_int(cyc) + " deadlines met" :
+                         fmt_int(miss) + " of " + fmt_int(cyc) + " deadlines missed (" + pct + "%); all others met") + "; " + lat;
         return t;
     }
     return json{{"error", "no such tool: " + name + ". Foreman has read-only tools and cannot change the machine."}};
