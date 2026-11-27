@@ -52,17 +52,17 @@ static const struct fm_profile profiles[] = {
      {{"speed_setpoint", "rpm"}, {"motor_speed", "rpm"}, {"drive_output", "%"},
       {"motor_temp", "degC"}, {"conveyor_load", "%"}, {"motor_current", "A"}},
      1450, 25, 0.25f, 6, 0.08f, 0.9f, 2, 0.12f, 25, 3.0f, 12, AUX2_LOAD, 40, 0,
-     industrial_rules, N(industrial_rules), industrial_scen, N(industrial_scen)},
+     industrial_rules, N(industrial_rules), industrial_scen, N(industrial_scen), 0},
     {"automotive", "EV drive unit DU-1, traction motor and inverter (simulated)",
      {{"torque_request", "Nm"}, {"motor_torque", "Nm"}, {"inverter_duty", "%"},
       {"inverter_temp", "degC"}, {"battery_soc", "%"}, {"phase_current", "A"}},
      180, 3.0f, 0.08f, 0, 0.3f, 3.0f, 5, 3.2f, 30, 0.2f, 12, AUX2_DRAIN, 62, 0.00002f,
-     automotive_rules, N(automotive_rules), automotive_scen, N(automotive_scen)},
+     automotive_rules, N(automotive_rules), automotive_scen, N(automotive_scen), 0},
     {"medical", "Infusion pump IP-2 (simulation only, not a medical device)",
      {{"flow_setpoint", "mL/h"}, {"measured_flow", "mL/h"}, {"pump_motor", "%"},
       {"line_pressure", "mmHg"}, {"volume_infused", "mL"}, {"motor_current", "mA"}},
      125, 2.5f, 0.5f, 0, 0.2f, 1.5f, 40, 2.0f, 50, 0.25f, 4, AUX2_INTEGRAL, 0, 1.0f / 3600.0f,
-     medical_rules, N(medical_rules), medical_scen, N(medical_scen)},
+     medical_rules, N(medical_rules), medical_scen, N(medical_scen), 1},
 };
 
 const struct fm_profile *fm_profile_find(const char *name) {

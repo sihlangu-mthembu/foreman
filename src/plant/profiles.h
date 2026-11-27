@@ -48,6 +48,7 @@ struct fm_profile {
     int n_rules;
     const struct fm_scenario *scenarios;
     int n_scenarios;
+    int clear_relieves_aux1; /* clearing the fault removes what held aux1 up at once (e.g. a kinked line's pressure) */
 };
 
 const struct fm_profile *fm_profile_find(const char *name);

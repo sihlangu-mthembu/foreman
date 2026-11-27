@@ -34,6 +34,12 @@ extern "C" {
 
 using json = nlohmann::ordered_json; // keep the machine's signal order
 static std::string fmt_num(double v);
+static std::string fmt_int(double v) { // 173041 -> "173,041"
+    std::string d = std::to_string((long long)std::llround(v)), out;
+    int k = 0;
+    for (size_t i = d.size(); i-- > 0;) { out.insert(out.begin(), d[i]); if (++k % 3 == 0 && i > 0 && d[i - 1] != '-') out.insert(out.begin(), ','); }
+    return out;
+}
 
 struct config {
     std::string host = "0.0.0.0";
@@ -120,6 +126,24 @@ static void load_manual(const std::string &profile) {
     g_manual.avglen = g_manual.secs.empty() ? 1 : (double)total / g_manual.secs.size();
 }
 
+// Minutes named in the current question ("over the last 2 minutes"), or 0. Set by chat() under g_llm_mutex.
+static int g_question_minutes = 0;
+static int minutes_in_question(const std::string &q) {
+    std::string l;
+    for (char c : q) l += (char)std::tolower((unsigned char)c);
+    for (size_t i = 0; i < l.size(); i++) {
+        if (!std::isdigit((unsigned char)l[i]) || (i > 0 && std::isdigit((unsigned char)l[i - 1]))) continue;
+        int n = std::atoi(l.c_str() + i);
+        size_t j = i;
+        while (j < l.size() && std::isdigit((unsigned char)l[j])) j++;
+        while (j < l.size() && l[j] == ' ') j++;
+        if (l.compare(j, 3, "min") == 0) return std::max(1, std::min(n, 60));
+        if (l.compare(j, 4, "hour") == 0) return 60;
+    }
+    if (l.find("last hour") != std::string::npos) return 60;
+    return 0;
+}
+
 static json search_manual(const std::string &profile, const std::string &query) {
     load_manual(profile);
     const double k1 = 1.4, b = 0.75, N = (double)g_manual.secs.size();
@@ -196,7 +220,22 @@ static json run_tool(const std::string &name, const json &args, const std::strin
             return json{{"error", "unknown signal '" + want + "'"}, {"valid_signals", names}};
         }
         int minutes = std::max(1, std::min(args.value("minutes", 10), 60));
+        if (g_question_minutes > 0) minutes = g_question_minutes; // the technician's own time span wins
         json tr = telemetry_json("trend/" + std::to_string(idx) + "/" + std::to_string(minutes));
+        // State the trend in words, so a small model doesn't have to work out signs and directions itself.
+        if (tr.contains("summary")) {
+            json &sm = tr["summary"];
+            std::string unit;
+            json stv = telemetry_json("status");
+            if (stv.contains("values") && stv["values"].contains(want)) unit = " " + stv["values"][want].value("unit", "");
+            double first = sm.value("first", 0.0), lastv = sm.value("last", 0.0), ch = lastv - first;
+            bool steady = std::fabs(ch) < 0.02 * std::max(std::fabs(first), std::fabs(lastv)) || std::fabs(ch) < 1e-6;
+            std::string dir = steady ? "roughly steady" : ch > 0 ? "rising" : "falling";
+            if (steady) ch = 0;
+            tr["in_words"] = want + " over the last " + std::to_string(minutes) + " min: " + dir + ", from " + fmt_num(first) + unit +
+                             " to " + fmt_num(lastv) + unit + " (change " + (ch > 0 ? "+" : "") + fmt_num(ch) + unit +
+                             "); lowest " + fmt_num(sm.value("min", 0.0)) + unit + ", highest " + fmt_num(sm.value("max", 0.0)) + unit;
+        }
         // Put the trend next to the alarms that are active now, so limits are not judged from numbers alone.
         json st = telemetry_json("status");
         tr["active_alarms_now"] = st.value("active_alarms", json::array());
@@ -215,7 +254,7 @@ static json run_tool(const std::string &name, const json &args, const std::strin
         t.erase("hist");
         double miss = t.value("deadline_misses", 0.0);
         t["all_deadlines_met"] = miss == 0;
-        t["verdict"] = miss == 0 ? "all deadlines met" : "some deadlines missed: " + fmt_num(miss) + " in this window";
+        t["verdict"] = miss == 0 ? "all deadlines met" : "some deadlines missed: " + fmt_int(miss) + " in this window";
         return t;
     }
     return json{{"error", "no such tool: " + name + ". Foreman has read-only tools and cannot change the machine."}};
@@ -254,11 +293,12 @@ static std::string machine_context(const json &status, const std::string &profil
     json tm = with_timing ? telemetry_json("timing") : json{{"error", "not requested"}};
     if (!tm.contains("error")) {
         double cyc = tm.value("cycles", 0.0), miss = tm.value("deadline_misses", 0.0);
+        char pct[32];
+        snprintf(pct, sizeof pct, "%.3g", cyc > 0 ? 100.0 * miss / cyc : 0.0);
         out += std::string("\ncontrol loop verdict: ") + (miss == 0 ? "ALL deadlines met (0 missed)" :
-               "NOT all deadlines met: " + fmt_num(miss) + " missed") +
-               "\ncontrol loop: " + fmt_num(1e6 / std::max(1.0, tm.value("period_us", 1000.0))) + " Hz, " +
-               fmt_num(miss) + " missed deadlines in " + fmt_num(cyc) + " cycles (" +
-               fmt_num(cyc > 0 ? 100.0 * miss / cyc : 0.0) + "%), worst wake-up latency " +
+               "NOT all deadlines met: " + fmt_int(miss) + " of " + fmt_int(cyc) + " cycles missed (" + pct + "%)") +
+               "\ncontrol loop: " + fmt_int(1e6 / std::max(1.0, tm.value("period_us", 1000.0))) + " Hz, " +
+               fmt_int(miss) + " missed deadlines in " + fmt_int(cyc) + " cycles (" + pct + "%), worst wake-up latency " +
                fmt_num(tm.value("max_wake_latency_us", 0.0) / 1000.0) + " ms, p99 " +
                fmt_num(tm.value("p99_wake_latency_us", 0.0)) + " us";
     }
@@ -348,6 +388,7 @@ static json chat(const json &history) {
     json &last = messages.back();
     if (last.value("role", "") == "user") {
         std::string q = last.value("content", "");
+        g_question_minutes = minutes_in_question(q);
         std::string ctx = machine_context(status, profile, asks_about_timing(q));
         acting = asks_for_action(q);
         if (acting)

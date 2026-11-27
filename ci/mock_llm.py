@@ -12,7 +12,10 @@ class H(http.server.BaseHTTPRequestHandler):
         elif len(tool_msgs) == 2:
             msg = {"role":"assistant","content":None,"tool_calls":[{"id":"c3","type":"function","function":{"name":"search_manual","arguments":json.dumps({"query":"E42 jam recovery"})}}]}
         else:
-            summary = " | ".join(m['content'][:160] for m in tool_msgs)
+            def brief(c):
+                try: return json.loads(c).get("in_words") or c[:160]
+                except Exception: return c[:160]
+            summary = " | ".join(brief(m['content']) for m in tool_msgs)
             msg = {"role":"assistant","content":"MOCK ANSWER based on: " + summary}
         out = {"choices":[{"message":msg}],"usage":{"prompt_tokens":100,"completion_tokens":20}}
         b = json.dumps(out).encode(); self.send_response(200); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(b))); self.end_headers(); self.wfile.write(b)

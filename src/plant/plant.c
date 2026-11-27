@@ -199,6 +199,7 @@ static void handle_command(struct sim *s, const char *cmd) {
         log_event(2, "OP", "unknown scenario requested", 0);
     } else if (strcmp(cmd, "clear") == 0) {
         s->scen = NULL; s->load_extra = s->aux1_extra = 0; s->bias = 0; s->scen_t = 0;
+        if (s->p->clear_relieves_aux1) s->aux1 = s->p->aux1_base; /* the occlusion is gone: line pressure drops */
         if (s->p->aux2_kind == AUX2_DRAIN && s->aux2 < 20) s->aux2 = s->p->aux2_init; /* "recharged" */
         memset(s->rs, 0, sizeof s->rs);
         s->mode = FM_RUN; s->derate = 1;

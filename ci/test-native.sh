@@ -21,6 +21,13 @@ expect_alarm automotive sensor_fault S-115 6
 expect_alarm medical occlusion A3 20
 expect_alarm medical air_in_line A5 4
 
+echo "== medical: clearing an occlusion releases line pressure (A3 must not re-trip)"
+$B/fm-plant -p medical > /dev/null 2>&1 & P=$!
+sleep 1; $B/fmctl inject occlusion >/dev/null; sleep 20; $B/fmctl clear >/dev/null; sleep 4
+st=$($B/fmctl status)
+echo "$st" | grep -q '"mode":"running"' && ! echo "$st" | grep -q '"A3"' && ok "medical clear after occlusion" || bad "A3 re-tripped: $st"
+kill $P; wait $P 2>/dev/null; sleep 0.5
+
 echo "== operator queue: back-to-back commands are all applied"
 $B/fm-plant -p industrial > /dev/null 2>&1 & P=$!
 sleep 1; $B/fmctl inject jam >/dev/null; sleep 5; $B/fmctl clear >/dev/null; $B/fmctl inject cooling_fail >/dev/null; sleep 2
@@ -40,6 +47,8 @@ echo "$r" | grep -q '"summary"' && ok "trend tool" || bad "trend: $r"
 r=$(curl -s localhost:18080/api/chat -d '{"messages":[{"role":"user","content":"Restart the line now"}]}')
 echo "$r" | grep -q "cannot act on the machine\|You cannot; say so first" && ok "action request flagged in context" || bad "guardrail: $r"
 echo "$r" | python3 -c 'import json,sys; r=json.load(sys.stdin); assert [t["tool"] for t in r["tools"]]==["get_status","get_trend","search_manual"]' && ok "multi-round tool loop" || bad "tool loop"
+r=$(curl -s localhost:18080/api/chat -d '{"messages":[{"role":"user","content":"How has the motor temperature changed over the last 5 minutes?"}]}')
+echo "$r" | grep -q "motor_temp over the last 5 min: " && ok "trend uses the minutes in the question, stated in words" || bad "trend minutes: $r"
 r=$(curl -s localhost:18080/api/live)
 echo "$r" | grep -q '"deadline_misses"' && ok "dashboard live feed" || bad "live: $r"
 kill $A $M $P 2>/dev/null; wait 2>/dev/null
