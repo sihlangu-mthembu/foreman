@@ -25,6 +25,10 @@ jobs:
           cp -r foreman/contrib/qnx-ports/llama.cpp build-files/ports/llama.cpp
           source /home/runner/qnx/800/qnxsdp-env.sh
           QNX_PROJECT_ROOT="$(pwd)/llama.cpp" make -C build-files/ports/llama.cpp install JLEVEL=$(nproc) \
-            INSTALL_ROOT_nto=/tmp/staging USE_INSTALL_ROOT=true > recipe.log 2>&1 || { grep -E -B2 -A8 "error|Error" recipe.log | tail -80; exit 1; }
+            INSTALL_ROOT_nto=/tmp/staging USE_INSTALL_ROOT=true > recipe.log 2>&1 || { grep -E -B2 -A8 "error|Error" recipe.log | tail -40
+              grep -E "qnx.patch" recipe.log; (cd llama.cpp && git status --short)
+              f=$(find build-files/ports/llama.cpp -path '*quantize-impl.dir/flags.make' | head -1); echo "== $f"; cat "$f"
+              grep -n -B6 -A2 "define SA_RESTART" $QNX_TARGET/usr/include/signal.h
+              grep -rn "define __EXT_UNIX_MISC\|define __EXT_POSIX1_200112\|define __EXT_XOPEN_EX" $QNX_TARGET/usr/include/sys/platform.h | head; exit 1; }
           grep -E "GGML_SYSTEM_ARCH|qnx.patch" recipe.log | sort | uniq
           for a in x86_64 aarch64le; do echo "== $a"; ls /tmp/staging/$a/usr/local/bin | head -40 | tr '\n' ' '; echo; file /tmp/staging/$a/usr/local/bin/llama-server /tmp/staging/$a/usr/local/lib/libllama.so* | cut -c1-140; done
