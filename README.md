@@ -14,7 +14,7 @@ The AI is built so it can't harm the machine:
 - **It can never outrank the control loop.** The 1 kHz control loop runs at a privileged priority (70). The AI runs as an unprivileged user, which QNX caps at priority 63.
 - **It can't escalate later.** At start-up it gives up and locks the OS abilities it would need to raise priority, touch hardware, register paths or spawn processes.
 
-This repository also contains the first port of **[llama.cpp](https://github.com/ggml-org/llama.cpp) to QNX 8.0**, in [`port/llama.cpp`](port/llama.cpp).
+This repository also contains a port of **[llama.cpp](https://github.com/ggml-org/llama.cpp) to QNX 8.0**, in [`port/llama.cpp`](port/llama.cpp), packaged as a [qnx-ports](https://github.com/qnx-ports/build-files) build recipe in [`contrib/qnx-ports/llama.cpp`](contrib/qnx-ports/llama.cpp).
 
 Category: **Open-Source Contribution & Ports**. Everything here was built during the QNX Global Hackathon (November–December 2026).
 
