@@ -8,7 +8,7 @@ Use `$(nproc)` instead of `4` after `JLEVEL=` and `-j` if you want to use the ma
 
 To install the library files at a specific location (e.g. `/tmp/staging`) use options `INSTALL_ROOT_nto=<staging-install-folder>` and `USE_INSTALL_ROOT=true` with the build command.
 
-`qnx.patch` (six small changes, each guarded by `__QNX__` or `CMAKE_SYSTEM_NAME STREQUAL "QNX"`) is applied to the upstream checkout automatically:
+`qnx.patch` (six small changes, each guarded by `__QNX__`, `CMAKE_SYSTEM_NAME STREQUAL "QNX"` or `#ifdef SA_RESTART`, so other platforms are unaffected) is applied to the upstream checkout automatically:
 
 - `ggml-cpu.cpp`: QNX has no `_SC_PHYS_PAGES`. Device memory comes from the system page (`SYSPAGE_ENTRY(asinfo)`), and free memory from `/proc`.
 - `common/download.cpp`: `PATH_MAX` is in `<limits.h>` on QNX.
@@ -68,7 +68,7 @@ Copy the binaries and libraries to the target. A QEMU image needs a data partiti
 TARGET_HOST=<target-ip-address-or-hostname>
 ARCH=x86_64   # or aarch64le
 scp $QNX_TARGET/$ARCH/usr/local/bin/llama-* qnxuser@$TARGET_HOST:/data/home/qnxuser/bin
-scp $QNX_TARGET/$ARCH/usr/local/lib/libllama* $QNX_TARGET/$ARCH/usr/local/lib/libggml* qnxuser@$TARGET_HOST:/data/home/qnxuser/lib
+scp $QNX_TARGET/$ARCH/usr/local/lib/*.so* qnxuser@$TARGET_HOST:/data/home/qnxuser/lib
 scp <model>.gguf qnxuser@$TARGET_HOST:/data/home/qnxuser/
 ```
 
@@ -83,9 +83,10 @@ bin/llama-server -m <model>.gguf -c 4096 -t 2 --host 0.0.0.0 --port 8081 --jinja
 
 Always pass a context size (`-c`). Otherwise llama.cpp sizes the context from the model's maximum, which can exceed a small target's memory.
 
-Tested on QNX 8.0 x86_64 (QEMU/KVM, 2 vCPUs) with Qwen2.5-1.5B and Qwen3-1.7B (Q4_K_M):
-- prompt processing about 40 tokens/s;
-- generation 12–20 tokens/s;
-- `llama-server` chat completions with tool calling.
+The tools are split into shared libraries (for example `libllama-server-impl.so`), so copy every `.so` file from `lib`, not only `libllama` and `libggml`.
+
+Tested on QNX 8.0 x86_64 (QEMU/KVM, 2 vCPUs) with Qwen3-1.7B and Qwen2.5-1.5B (Q4_K_M):
+- `llama-bench`: prompt processing 40–58 tokens/s, generation 12–21 tokens/s, depending on the host CPU;
+- `llama-server`: chat completions, including tool calling.
 
 aarch64le builds; reports from Raspberry Pi 4/5 are welcome.
