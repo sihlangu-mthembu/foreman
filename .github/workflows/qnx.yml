@@ -17,7 +17,7 @@ on:
   push:
     branches: [main]
     paths: ['src/**', 'profiles/**', 'web/**', 'scripts/**', 'port/**', 'ci/**', 'Makefile', '.github/**', '!.github/workflows/qnx-ports-recipe.yml', '!.github/workflows/boot-probe.yml']
-concurrency: { group: qnx, cancel-in-progress: true }
+concurrency: { group: "qnx-${{ inputs.profile || 'industrial' }}", cancel-in-progress: true }
 env:
   LLAMA_TAG: b12778
   PROFILE: ${{ inputs.profile || 'industrial' }}
