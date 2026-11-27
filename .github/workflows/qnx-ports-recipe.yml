@@ -51,10 +51,10 @@ jobs:
           S=ci/qnx-ssh.sh; H=/data/home/qnxuser; R=/tmp/staging/x86_64/usr/local
           $S run "mkdir -p $H/bin $H/lib"
           $S put $R/bin/llama-bench $R/bin/llama-server $H/bin/
-          $S put $(ls $R/lib/libllama.so* $R/lib/libggml*.so* $R/lib/libmtmd.so* 2>/dev/null) $H/lib/
+          ls $R/lib; $S put $R/lib/*.so* $H/lib/
           $S put ../models/model.gguf $H/model.gguf
           E="export LD_LIBRARY_PATH=$H/lib:\$LD_LIBRARY_PATH; cd $H"
-          $S run "$E; uname -a; bin/llama-bench -m model.gguf -t 2 -p 32 -n 16 2>&1 | tail -6"
+          $S run "$E; uname -a; bin/llama-bench -m model.gguf -t 2 -p 32 -n 16 2>&1 | tail -6; ldd bin/llama-server | tail -12"
           $S run "$E; nohup bin/llama-server -m model.gguf -c 2048 -t 2 --host 127.0.0.1 --port 8081 --jinja > srv.log 2>&1 &"
           for i in $(seq 1 60); do $S run "curl -s http://127.0.0.1:8081/health" 2>/dev/null | grep -q ok && break; sleep 3; done
           $S run "curl -s http://127.0.0.1:8081/v1/chat/completions -H 'Content-Type: application/json' -d '{\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: ready\"}],\"max_tokens\":16,\"chat_template_kwargs\":{\"enable_thinking\":false}}'" | tee reply.json
