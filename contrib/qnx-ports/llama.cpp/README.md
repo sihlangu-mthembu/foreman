@@ -14,7 +14,7 @@ To install the library files at a specific location (e.g. `/tmp/staging`) use op
 - `common/download.cpp`: `PATH_MAX` is in `<limits.h>` on QNX.
 - `vendor/sheredom/subprocess.h`: QNX has `posix_spawn` but no `posix_spawn_file_actions_addchdir_np`.
 - `vendor/cpp-httplib/CMakeLists.txt`, `common/CMakeLists.txt`: link `libsocket`.
-- `CMakeLists.txt`: define `_QNX_SOURCE`, so QNX exposes POSIX/XSI extensions such as `SA_RESTART`.
+- `tools/quantize/quantize.cpp`: use `SA_RESTART` only where it is defined (QNX 8.0 does not support it).
 
 # Compile the port for QNX in a Docker container
 

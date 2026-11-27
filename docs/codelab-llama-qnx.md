@@ -38,11 +38,11 @@ qemu-system-x86_64 -smp 2 --enable-kvm --cpu host -m 3G \
 ssh -p 2222 qnxuser@localhost uname -a       # password: qnxuser
 ```
 
-> **Tip:** keep `-m` at 3G or less with the default image. In our tests, building the image with `--ram=4G` made the kernel stop during early boot.
+> **Tip:** if the kernel stops during early boot with "Too early for per-cpu data", your host CPU probably has AMX or AVX-512. Hide them from the guest, for example `-cpu host,-la57,-amx-tile,-amx-int8,-amx-bf16,-avx512f,-avx512vl,-avx512bw,-avx512dq,-avx512cd`. See [RESULTS.md](RESULTS.md#note-booting-qnx-80-under-kvm-on-recent-intel-server-cpus) for details.
 
 ## 3. Cross-compile llama.cpp for QNX (15 min)
 
-llama.cpp needs five small changes for QNX. They are in [`port/llama.cpp`](../port/llama.cpp), with an explanation of each:
+llama.cpp needs six small changes for QNX. They are in [`port/llama.cpp`](../port/llama.cpp), with an explanation of each:
 
 ```sh
 git clone https://github.com/sihlangu-mthembu/foreman
@@ -56,6 +56,7 @@ What the patch fixes, in one line each:
 - **`PATH_MAX`:** on QNX it is in `<limits.h>`.
 - **Subprocesses:** `posix_spawn` has no chdir action on QNX, so that feature is reported as unsupported.
 - **Sockets:** they live in `libsocket`, so the patch links it.
+- **`SA_RESTART`:** QNX 8.0 does not support it, so `llama-quantize` uses it only where it is defined.
 
 ## 4. Copy the server and a model to QNX (5 min)
 
