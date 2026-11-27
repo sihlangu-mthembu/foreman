@@ -32,3 +32,30 @@ jobs:
               grep -rn "define __EXT_UNIX_MISC\|define __EXT_POSIX1_200112\|define __EXT_XOPEN_EX" $QNX_TARGET/usr/include/sys/platform.h | head; exit 1; }
           grep -E "GGML_SYSTEM_ARCH|qnx.patch" recipe.log | sort | uniq
           for a in x86_64 aarch64le; do echo "== $a"; ls /tmp/staging/$a/usr/local/bin | head -40 | tr '\n' ' '; echo; file /tmp/staging/$a/usr/local/bin/llama-server /tmp/staging/$a/usr/local/lib/libllama.so* | cut -c1-140; done
+      - name: Host tools for the target smoke test
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils sshpass >/dev/null
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Model
+        uses: actions/cache/restore@v4
+        with: { path: models, key: models-qwen3-1.7b }
+      - name: Run the recipe's x86_64 build on QNX 8.0 (QEMU/KVM)
+        working-directory: foreman
+        run: |
+          [ -f ../models/model.gguf ] || { mkdir -p ../models; curl -sSL --retry 3 -o ../models/model.gguf https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf; }
+          source /home/runner/qnx/800/qnxsdp-env.sh
+          mkdir -p img && (cd img && mkqnximage --type=qemu --arch=x86_64 --clean --force --noprompt \
+            --data-size=3000 --data-inodes=20000 2>&1 | grep -v "Broken pipe" | tail -2)
+          QRAM=3G QCPU=2 ci/qemu-up.sh img
+          S=ci/qnx-ssh.sh; H=/data/home/qnxuser; R=/tmp/staging/x86_64/usr/local
+          $S run "mkdir -p $H/bin $H/lib"
+          $S put $R/bin/llama-bench $R/bin/llama-server $H/bin/
+          $S put $(ls $R/lib/libllama.so* $R/lib/libggml*.so* $R/lib/libmtmd.so* 2>/dev/null) $H/lib/
+          $S put ../models/model.gguf $H/model.gguf
+          E="export LD_LIBRARY_PATH=$H/lib:\$LD_LIBRARY_PATH; cd $H"
+          $S run "$E; uname -a; bin/llama-bench -m model.gguf -t 2 -p 32 -n 16 2>&1 | tail -6"
+          $S run "$E; nohup bin/llama-server -m model.gguf -c 2048 -t 2 --host 127.0.0.1 --port 8081 --jinja > srv.log 2>&1 &"
+          for i in $(seq 1 60); do $S run "curl -s http://127.0.0.1:8081/health" 2>/dev/null | grep -q ok && break; sleep 3; done
+          $S run "curl -s http://127.0.0.1:8081/v1/chat/completions -H 'Content-Type: application/json' -d '{\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: ready\"}],\"max_tokens\":16,\"chat_template_kwargs\":{\"enable_thinking\":false}}'" | tee reply.json
+          grep -qi ready reply.json
